@@ -37,7 +37,7 @@ void NxzEncoder::encode() {
 	FpuPrecision::store();
 	FpuPrecision::setFloat();
 
-	stream.reserve(node.nvert);
+	stream.reserve(nvert);
 
 	quantize();
 
@@ -67,7 +67,7 @@ void NxzEncoder::encode() {
 }
 
 void NxzEncoder::quantizeCoords() {
-	vcg::Point2i cmin(2147483647,2147483647), cmax(–2147483648, –2147483648);
+	vcg::Point2i cmin(2147483647, 2147483647), cmax(-2147483648, -2147483648);
 
 	qpoints.resize(node.nvert);
 	for(unsigned int i = 0; i < node.nvert; i++) {
@@ -96,7 +96,7 @@ void NxzEncoder::quantizeCoords() {
 }
 
 void NxzEncoder::quantizeTexCoords() {
-	vcg::Point2i tmin(2147483647,2147483647), tmax(–2147483648, –2147483648);
+	vcg::Point2i tmin(2147483647,2147483647), tmax(-2147483648, -2147483648);
 
 	qtexcoords.resize(node.nvert);
 	for(unsigned int i = 0; i < node.nvert; i++) {
@@ -129,7 +129,6 @@ void NxzEncoder::quantize() {
 
 	if(!sig.face.hasIndex()) {
 
-		//TODO use boundary information for better quantization on the inside.
 		zpoints.resize(node.nvert);
 		for(int i = 0; i < node.nvert; i++) {
 			Point3i q = qpoints[i];

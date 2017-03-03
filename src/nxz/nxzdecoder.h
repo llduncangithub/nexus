@@ -21,10 +21,10 @@ for more details.
 #include <vector>
 #include <algorithm>
 
-#include "cstream.h"
-#include "tunstall.h"
-#include "fpu_precision.h"
-#include "zpoint.h"
+#include "../nxszip/cstream.h"
+#include "../nxszip/tunstall.h"
+#include "../nxszip/fpu_precision.h"
+#include "../nxszip/zpoint.h"
 #include "../common/nexusdata.h"
 
 

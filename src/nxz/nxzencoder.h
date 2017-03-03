@@ -20,6 +20,7 @@ for more details.
 
 #include <vector>
 
+#include <vcg/space/color4.h>
 #include <vcg/space/point3.h>
 #include <vcg/space/point2.h>
 
@@ -32,13 +33,6 @@ class NxzEncoder {
 public:
 	enum Clers { VERTEX = 0, LEFT = 1, RIGHT = 2, END = 3, BOUNDARY = 4, DELAY = 5 };
 
-	int coord_q; //coordinates quantization.
-	int uv_q;    //texture quantization
-
-	int coord_bits;    //number of bits for coordinates.
-	int uv_bits;       //bumber of bits for texture coordinates
-	int norm_bits;     //normal bits
-	int color_bits[4]; //color bits
 
 	CStream stream;
 	//compression stats
@@ -47,26 +41,64 @@ public:
 	int color_size;
 	int face_size;
 
-	NxzEncoder(uint32_t nvert, uint32_t nface):
+	NxzEncoder(uint32_t _nvert, uint32_t _nface):
+		nvert(_nvert), nface(_nface),
 		coord_q(0), uv_q(0), coord_bits(12), uv_bits(12), norm_bits(10),
 		coord_size(0), normal_size(0), color_size(0), face_size(0),
 		coords(NULL), normals(NULL), uv(NULL), colors(NULL) {
 		color_bits[0] = color_bits[1] = color_bits[2] = color_bits[3] = 6;
 		for(int i = 0; i < 8; i++) data[i] = NULL;
 	}
-	void addCoords(float *buffer, float q = 0, vcg::Point3f offset = vcg::Point3f(0, 0, 0));
-	void setCoordBits(int bits);
-	void addNormals(float *buffer, int bits);
-	void addNormals(int16_t *buffer, int bits);
-	void addColors(unsigned char *buffer, int lumabits, int chromabits, int alphabits);
-	void addUV(float *buffer, float q =  0);
-	void addData(float *buffer, float q);
+	void addCoords(float *buffer, float q = 0, vcg::Point3f o = vcg::Point3f(0, 0, 0)) {
+		coords = (vcg::Point3f *)buffer;
+		coord_q = q;
+		offset = o;
+	}
+
+	void addNormals(float *buffer, int bits) {
+		normals = (vcg::Point3f *)buffer;
+		norm_bits = bits;
+	}
+
+	void addNormals(int16_t *buffer, int bits) {
+		normals16 = (vcg::Point2s *)buffer;
+		norm_bits = bits;
+	}
+
+	void addColors(unsigned char *buffer, int lumabits, int chromabits, int alphabits) {
+		colors = (vcg::Color4b *)buffer;
+		color_bits[0] = lumabits;
+		color_bits[1] = color_bits[2] = chromabits;
+		color_bits[3] = alphabits;
+	}
+	void addUV(float *buffer, float q =  0) {
+		uv = (vcg::Point2f *)buffer;
+		uv_q = q;
+	}
+
+	void addData(float *buffer, float q) {
+		data[0] = buffer;
+		data_q[0] = q;
+	}
+
 	void encode();
 
 private:
+	int nvert, nface;
+	int coord_q; //coordinates quantization.
+	vcg::Point3f offset;
+	int uv_q;    //texture quantization
+	int data_q[8];
+
+	int coord_bits;    //number of bits for coordinates.
+	int uv_bits;       //bumber of bits for texture coordinates
+	int norm_bits;     //normal bits
+	int color_bits[4]; //color bits
+
 	vcg::Point3f *coords, *normals;
 	vcg::Point2f *uv;
-	unsigned char *colors;
+	vcg::Point2s *normals16;
+	vcg::Color4b *colors;
 	float *data[8];
 
 	std::vector<vcg::Point3i> qpoints;

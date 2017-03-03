@@ -12,7 +12,6 @@ INCLUDEPATH += ../../../vcglib ../../../vcglib/eigenlib
 SOURCES += main.cpp \
     nxzdecoder.cpp \
     nxzencoder.cpp
-
 HEADERS += \
     nxzdecoder.h \
     nxzencoder.h

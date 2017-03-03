@@ -19,7 +19,7 @@ for more details.
 #include <array>        // std::array
 #include <random>       // std::default_random_engine
 #include <deque>
-#include "NxzDecoder.h"
+#include "nxzdecoder.h"
 
 using namespace std;
 using namespace vcg;
