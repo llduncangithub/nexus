@@ -15,8 +15,8 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License (http://www.gnu.org/licenses/gpl.txt)
 for more details.
 */
-#ifndef NX_MESHDECODER_H
-#define NX_MESHDECODER_H
+#ifndef NXZ_DECODER_H
+#define NXZ_DECODER_H
 
 #include <vector>
 #include <algorithm>
@@ -39,18 +39,18 @@ public:
 		v0(a), v1(b), v2(c), prev(p), next(n), deleted(false) {}
 };
 
-class MeshDecoder {
+class NxzDecoder {
 public:
 	enum Clers { VERTEX = 0, LEFT = 1, RIGHT = 2, END = 3, BOUNDARY = 4, DELAY = 5 };
 	float error; //quadric error on internal vertices, 0 on boundary vertices
 	int coord_q; //global power of 2 quantization.
 	int norm_q;  //normal bits
 	int color_q[4]; //color bits
-	int tex_q;   //texture bits
+	int uv_q;   //texture bits
 
 	CStream stream;
 
-	MeshDecoder(nx::Node &_node, nx::NodeData &_data, nx::Patch *_patches, nx::Signature &_sig):
+	NxzDecoder(nx::Node &_node, nx::NodeData &_data, nx::Patch *_patches, nx::Signature &_sig):
 		node(_node), data(_data), patches(_patches), sig(_sig), vertex_count(0) {}
 
 	void decode(int len, uchar *input);
@@ -66,7 +66,7 @@ private:
 	vcg::Point3i tmin, tmax; //minimum position of texcoords
 
 	int coord_bits; //number of bits for coordinates.
-	int tex_bits;  //number of bits for textures
+	int uv_bits;  //number of bits for textures
 
 	std::vector<bool> boundary;
 	std::vector<int> last;
@@ -79,7 +79,7 @@ private:
 	void shuffle(); //shuffle vertices for point clouds
 
 	void decodeFaces(int start, uint16_t *faces);
-	//TODO these are in common with MeshCoder, we should make a meshencoder class and move the common parts
+	//TODO these are in common with MeshCoder, we should make a NxzEncoder class and move the common parts
 	void computeNormals(vcg::Point3s *estimated_normals);
 	void markBoundary();
 
@@ -91,4 +91,4 @@ private:
 	int vertex_count; //keep tracks of current decoding vertex
 };
 
-#endif // NX_MESHDECODER_H
+#endif // NXZ_DECODER_H

@@ -26,22 +26,18 @@ for more details.
 #include "../nxszip/cstream.h"
 #include "../nxszip/zpoint.h"
 
-
 namespace nx {
 
-//face topology utility structures.
-
-
-class MeshEncoder {
+class NxzEncoder {
 public:
 	enum Clers { VERTEX = 0, LEFT = 1, RIGHT = 2, END = 3, BOUNDARY = 4, DELAY = 5 };
 
-	int coord_q; //global power of 2 quantization.
-	int tex_q;   //texture bits
+	int coord_q; //coordinates quantization.
+	int uv_q;    //texture quantization
 
-	int coord_bits; //number of bits for coordinates.
-	int tex_bits; //bumber of bits for texture coordinates
-	int norm_bits;  //normal bits
+	int coord_bits;    //number of bits for coordinates.
+	int uv_bits;       //bumber of bits for texture coordinates
+	int norm_bits;     //normal bits
 	int color_bits[4]; //color bits
 
 	CStream stream;
@@ -51,25 +47,27 @@ public:
 	int color_size;
 	int face_size;
 
-	MeshEncoder(uint32_t nvert, uint32_t nface):
-		coord_q(0), tex_q(0), coord_bits(12), tex_bits(12), norm_bits(10),
-		coord_size(0), normal_size(0), color_size(0), face_size(0) {
+	NxzEncoder(uint32_t nvert, uint32_t nface):
+		coord_q(0), uv_q(0), coord_bits(12), uv_bits(12), norm_bits(10),
+		coord_size(0), normal_size(0), color_size(0), face_size(0),
+		coords(NULL), normals(NULL), uv(NULL), colors(NULL) {
 		color_bits[0] = color_bits[1] = color_bits[2] = color_bits[3] = 6;
+		for(int i = 0; i < 8; i++) data[i] = NULL;
 	}
-	void addCoords(float *buffer, float q = 0); //if not specified, use coord_bits instead
+	void addCoords(float *buffer, float q = 0, vcg::Point3f offset = vcg::Point3f(0, 0, 0));
+	void setCoordBits(int bits);
 	void addNormals(float *buffer, int bits);
+	void addNormals(int16_t *buffer, int bits);
 	void addColors(unsigned char *buffer, int lumabits, int chromabits, int alphabits);
 	void addUV(float *buffer, float q =  0);
 	void addData(float *buffer, float q);
 	void encode();
 
 private:
-	float *coords, *normals, *uv;
+	vcg::Point3f *coords, *normals;
+	vcg::Point2f *uv;
+	unsigned char *colors;
 	float *data[8];
-
-	vcg::Point3i min, max; //minimum position of vertices
-	vcg::Point2i tmin, tmax; //minimum position texture coordinates
-
 
 	std::vector<vcg::Point3i> qpoints;
 	std::vector<vcg::Point2i> qtexcoords;
@@ -91,7 +89,6 @@ private:
 	void encodeCoordinates(); //used only for point clouds
 	void encodeNormals();
 	void encodeColors();
-	void encodeTexCoords();
 
 	void encodeFaces(int start, int end);
 

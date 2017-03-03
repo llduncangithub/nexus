@@ -33,9 +33,7 @@ static int ilog2(uint64_t p) {
 	return k;
 }
 
-
-
-void MeshEncoder::encode() {
+void NxzEncoder::encode() {
 	FpuPrecision::store();
 	FpuPrecision::setFloat();
 
@@ -68,85 +66,63 @@ void MeshEncoder::encode() {
 	FpuPrecision::restore();
 }
 
-void MeshEncoder::quantizeCoords() {
-	//quantize vertex position and compute min.
-	float side = pow(2.0f, (float)coord_q);
+void NxzEncoder::quantizeCoords() {
+	vcg::Point2i cmin(2147483647,2147483647), cmax(–2147483648, –2147483648);
 
-	//TODO use quadric to quantize for better rate?  probably not worth it, for so few bits.
 	qpoints.resize(node.nvert);
 	for(unsigned int i = 0; i < node.nvert; i++) {
-		Point3f &p = data.coords()[i];
+		Point3f &p = coords[i];
 		Point3i &q = qpoints[i];
 		for(int k = 0; k < 3; k++) {
-			q[k] = (int)floor(p[k]/side + 0.5f);
-			if(k == 1)
-				q[k] *= 1.0;
-			if(i == 0) {
-				min[k] = q[k];
-				max[k] = q[k]; }
-			else {
-				if(min[k] > q[k]) min[k] = q[k];
-				if(max[k] < q[k]) max[k] = q[k];
-			}
+			q[k] = (int)floor(p[k]/coord_q + 0.5f);
+			if(cmin[k] > q[k]) cmin[k] = q[k];
+			if(cmax[k] < q[k]) cmax[k] = q[k];
 		}
 	}
-	for(unsigned int i = 0; i < node.nvert; i++)
-		qpoints[i] -= min;
-	Point3i d = max - min;
-	coord_bits = 1+std::max(std::max(ilog2(d[0]), ilog2(d[1])), ilog2(d[2]));
+	for(auto &q: qpoints)
+		q -= cmin;
+
+	cmax -= cmin;
+	coord_bits = 1+std::max(std::max(ilog2(cmax[0]), ilog2(cmax[1])), ilog2(cmax[2]));
 	assert(d[0] < (1<<coord_bits));
 	assert(d[1] < (1<<coord_bits));
 	assert(d[2] < (1<<coord_bits));
 
-	stream.write<int>(min[0]);
-	stream.write<int>(min[1]);
-	stream.write<int>(min[2]);
+	stream.write<int>(cmin[0]);
+	stream.write<int>(cmin[1]);
+	stream.write<int>(cmin[2]);
 	stream.write<char>(coord_q);
 	stream.write<char>(coord_bits);
-
-	//same operations as vertex coordinates.
 }
 
-void MeshEncoder::quantizeTexCoords() {
-	//quantize vertex position and compute min.
-	float side = pow(2.0f, (float)tex_q);
+void NxzEncoder::quantizeTexCoords() {
+	vcg::Point2i tmin(2147483647,2147483647), tmax(–2147483648, –2147483648);
 
-	//TODO use quadric to quantize for better rate?  probably not worth it, for so few bits.
 	qtexcoords.resize(node.nvert);
-	Point2f *texcoords = data.texCoords(sig, node.nvert);
 	for(unsigned int i = 0; i < node.nvert; i++) {
-		Point2f &p = texcoords[i];
+		Point2f &p = uv[i];
 		Point2i &q = qtexcoords[i];
 		for(int k = 0; k < 2; k++) {
-			//obviously wrong textures moved to 0,0.
-			q[k] = (int)floor(p[k]/side + 0.5f);
-//			if(q[0] < 0)
-
-			if(i == 0) {
-				tmin[k] = q[k];
-				tmax[k] = q[k];
-			} else {
-				if(tmin[k] > q[k]) tmin[k] = q[k];
-				if(tmax[k] < q[k]) tmax[k] = q[k];
-			}
+			q[k] = (int)floor(p[k]/uv_q + 0.5f);
+			if(tmin[k] > q[k]) tmin[k] = q[k];
+			if(tmax[k] < q[k]) tmax[k] = q[k];
 		}
 	}
-	for(unsigned int i = 0; i < node.nvert; i++)
-		qtexcoords[i] -= tmin;
-	Point2i d = tmax - tmin;
-	tex_bits = 1+std::max(ilog2(d[0]), ilog2(d[1]));
-	assert(d[0] < (1<<tex_bits));
-	assert(d[1] < (1<<tex_bits));
+	for(auto &t: qtexcoords)
+		t -= tmin;
+
+	tmax -= tmin;
+	uv_bits = 1+std::max(ilog2(tmax[0]), ilog2(tmax[1]));
+	assert(d[0] < (1<<uv_bits));
+	assert(d[1] < (1<<uv_bits));
 
 	stream.write<int>(tmin[0]);
 	stream.write<int>(tmin[1]);
-	stream.write<char>(tex_q);
-	stream.write<char>(tex_bits);
-
-	//same operations as vertex coordinates.
+	stream.write<char>(uv_q);
+	stream.write<char>(uv_bits);
 }
 
-void MeshEncoder::quantize() {
+void NxzEncoder::quantize() {
 	quantizeCoords();
 	if(sig.vertex.hasTextures())
 		quantizeTexCoords();
@@ -178,7 +154,7 @@ void MeshEncoder::quantize() {
 	}
 }
 
-void MeshEncoder::encodeCoordinates() {
+void NxzEncoder::encodeCoordinates() {
 
 	assert(!sig.face.hasIndex());
 
@@ -209,7 +185,7 @@ void MeshEncoder::encodeCoordinates() {
 
 
 //compact in place faces in data, update patches information, compute topology and encode each patch.
-void MeshEncoder::encodeFaces() {
+void NxzEncoder::encodeFaces() {
 
 	if(!node.nface) return;
 
@@ -255,7 +231,7 @@ void MeshEncoder::encodeFaces() {
 	}
 }
 
-void MeshEncoder::encodeNormals() {
+void NxzEncoder::encodeNormals() {
 
 	int side = 1<<(16 - norm_q);
 
@@ -327,7 +303,7 @@ void MeshEncoder::encodeNormals() {
 //for each edge a vertex is in, add or subtract the id of the other vertex depending on order
 //for internal vertices sum is zero.
 //unless we have strange configurations and a lot of sfiga, zero wont happen. //TODO think about this
-void MeshEncoder::markBoundary() {
+void NxzEncoder::markBoundary() {
 	if(!sig.face.hasIndex()) {
 		boundary.resize(node.nvert, true);
 		return;
@@ -348,7 +324,7 @@ void MeshEncoder::markBoundary() {
 }
 
 
-void MeshEncoder::computeNormals(vector<Point3s> &estimated_normals) {
+void NxzEncoder::computeNormals(vector<Point3s> &estimated_normals) {
 
 	uint16_t *faces = data.faces(sig, node.nvert);
 	vector<Point3i> normals(node.nvert, Point3i(0, 0, 0));
@@ -413,45 +389,32 @@ static Color4b toRGB(Color4b e) {
 }
 
 
-void MeshEncoder::encodeColors() {
-
-	Color4b *original_colors = data.colors(sig, node.nvert);
-	vector<Color4b> colors;
+void NxzEncoder::encodeColors() {
 
 	BitStream bitstream(node.nvert/2);
 	vector<uchar> diffs[4];
 
-
 	int steps[4];
 	for(int k = 0; k < 4; k++)
-		steps[k] = (1<<(8 - color_q[k]));
+		steps[k] = (1<<(8 - color_bits[k]));
 
 	if(sig.face.hasIndex()) {
-		colors.resize(node.nvert);
+		vector<Color4b> qcolors(node.nvert);
 		for(unsigned int i = 0; i < node.nvert; i++) {
 			for(int k = 0; k < 4; k++) {
-				colors[i][k] = original_colors[i][k]/steps[k]*steps[k];
+				qcolors[i][k] = colors[i][k]; ///steps[k]*steps[k]; AARRRGRGGH
 			}
-			colors[i] = toYCC(colors[i]);
-
-			/*
-			Color4b s = original_colors[i];
-			Color4b c = toRGB(colors[i]);
-			cout << "Orig: " << (int)s[0] << ":"
-					<< (int)s[1] << ":"
-					   << (int)s[2]
-				<< "Roundtrip: " << (int)c[0] << ":" << (int)c[1] << ":" << (int)c[2] << endl;
-*/
+			qcolors[i] = toYCC(qcolors[i]);
 		}
 
 		for(int i = 0; i < node.nvert; i++) {
-			Color4b &c = colors[order[i]];
+			Color4b &c = qcolors[order[i]];
 			int l = last[i];
 			Color4b b;
-			if(l < 0)
+			if(l < 0) //Is this 0, 0, 0 useful? Don't think so.
 				b = Color4b(0, 0, 0, 0);
 			else {
-				b = colors[last[i]];
+				b = qcolors[last[i]];
 			}
 
 			for(int k = 0; k < 4; k++) {
@@ -461,20 +424,11 @@ void MeshEncoder::encodeColors() {
 		}
 
 	} else {
-
-		//colors.resize(zpoints.size());
-		//for(unsigned int i = 0; i < order.size(); i++)
-		//colors[order[i]] = toYCC(original_colors[i]);
-
 		int on[4] = {0, 0, 0, 0}; //old color
 		for(unsigned int i = 0; i < zpoints.size(); i++) {
 			for(int k = 0; k < 4; k++) {
-				//int step = (1<<(8 - color_q[k]));
-				//int max_value = (1<<(color_q[k]));
-
-
 				int pos = zpoints[i].pos;
-				Color4b c = toYCC(original_colors[pos]);
+				Color4b c = toYCC(colors[pos]);
 				int n = c[k];
 
 				n = n/steps[k];
@@ -489,7 +443,7 @@ void MeshEncoder::encodeColors() {
 	int start = stream.size();
 
 	for(int k = 0; k < 4; k++)
-		stream.write<char>(color_q[k]);
+		stream.write<char>(color_bits[k]);
 
 	for(int k = 0; k < 4; k++) {
 		Tunstall tunstall;
@@ -502,7 +456,7 @@ void MeshEncoder::encodeColors() {
 	color_size = stream.size() - start;
 }
 
-void MeshEncoder::encodeTexCoords() {
+void NxzEncoder::encodeTexCoords() {
 	Point2f *tex_coords = data.texCoords(sig, node.nvert);
 
 	//
@@ -551,7 +505,7 @@ static int prev_(int t) {
 	return t;
 }
 
-void MeshEncoder::encodeFaces(int start, int end) {
+void NxzEncoder::encodeFaces(int start, int end) {
 	int useless = 0;
 
 	vector<McFace> faces(end - start);
@@ -804,7 +758,7 @@ int needed(int v) {
 	return n;
 }
 
-void MeshEncoder::encodeVertex(int target, const Point3i &predicted, const Point2i &texpredicted, BitStream &bitstream,
+void NxzEncoder::encodeVertex(int target, const Point3i &predicted, const Point2i &texpredicted, BitStream &bitstream,
 							   vector<uchar> &diffs, vector<uchar> &tdiffs) {
 
 
@@ -860,7 +814,7 @@ void MeshEncoder::encodeVertex(int target, const Point3i &predicted, const Point
 					<< "tex: " << qtexcoords[target][0] << " " << qtexcoords[target][1] << "\n"
 					<< "predicted: " << texpredicted[0] << " " << texpredicted[1] << "\n"
 					<< "dt: " << dt[0] << " " << dt[1] << endl;
-				cerr << "Tex q: " << tex_q << " tex bits " << tex_bits << endl;
+				cerr << "Tex q: " << uv_q << " tex bits " << uv_bits << endl;
 			}
 		}
 
@@ -877,7 +831,7 @@ void MeshEncoder::encodeVertex(int target, const Point3i &predicted, const Point
 }
 
 //val cam be zero.
-void MeshEncoder::encodeDiff(vector<uchar> &diffs, BitStream &stream, int val) {
+void NxzEncoder::encodeDiff(vector<uchar> &diffs, BitStream &stream, int val) {
 	val = Tunstall::toUint(val)+1;
 	int ret = ilog2(val);
 	diffs.push_back(ret);

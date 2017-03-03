@@ -19,13 +19,13 @@ for more details.
 #include <array>        // std::array
 #include <random>       // std::default_random_engine
 #include <deque>
-#include "meshdecoder.h"
+#include "NxzDecoder.h"
 
 using namespace std;
 using namespace vcg;
 using namespace nx;
 
-void MeshDecoder::decode(int len, uchar *input) {
+void NxzDecoder::decode(int len, uchar *input) {
 	FpuPrecision::store();
 	FpuPrecision::setFloat();
 
@@ -40,8 +40,8 @@ void MeshDecoder::decode(int len, uchar *input) {
 	if(sig.vertex.hasTextures()) {
 		tmin[0] = stream.read<int>();
 		tmin[1] = stream.read<int>();
-		tex_q = stream.read<char>();
-		tex_bits = stream.read<char>();
+		uv_q = stream.read<char>();
+		uv_bits = stream.read<char>();
 	}
 
 	if(sig.face.hasIndex())
@@ -59,7 +59,7 @@ void MeshDecoder::decode(int len, uchar *input) {
 }
 
 
-void MeshDecoder::decodeFaces() {
+void NxzDecoder::decodeFaces() {
 	if(!node.nface) return;
 
 	last.reserve(node.nvert);
@@ -77,7 +77,7 @@ void MeshDecoder::decodeFaces() {
 	dequantize();
 }
 
-void MeshDecoder::decodeCoordinates() {
+void NxzDecoder::decodeCoordinates() {
 
 	assert(!sig.face.hasIndex());
 
@@ -109,7 +109,7 @@ void MeshDecoder::decodeCoordinates() {
 		coords[i] = zpoints[i].toPoint(min, step);
 }
 
-void MeshDecoder::dequantize() {
+void NxzDecoder::dequantize() {
 	{
 		float step = pow(2.0f, (float)coord_q);
 		vcg::Point3f *coords = data.coords();
@@ -122,7 +122,7 @@ void MeshDecoder::dequantize() {
 		}
 	}
 	if(sig.vertex.hasTextures()) {
-		float step = pow(2.0f, (float)tex_q);
+		float step = pow(2.0f, (float)uv_q);
 		vcg::Point2f *texcoords = data.texCoords(sig, node.nvert);
 		for(int i = 0; i < node.nvert; i++) {
 			Point2i p = *(Point2i *)&texcoords[i];
@@ -133,7 +133,7 @@ void MeshDecoder::dequantize() {
 	}
 }
 
-void MeshDecoder::decodeNormals() {
+void NxzDecoder::decodeNormals() {
 
 	Point3s *norms = data.normals(sig, node.nvert);
 	norm_q = stream.read<char>();
@@ -221,7 +221,7 @@ void MeshDecoder::decodeNormals() {
 	}
 }
 
-void MeshDecoder::markBoundary() {
+void NxzDecoder::markBoundary() {
 	if(!sig.face.hasIndex()) {
 		boundary.resize(node.nvert, true);
 		return;
@@ -242,7 +242,7 @@ void MeshDecoder::markBoundary() {
 }
 
 
-void MeshDecoder::computeNormals(Point3s *estimated_normals) {
+void NxzDecoder::computeNormals(Point3s *estimated_normals) {
 
 	Point3f *coords = data.coords();
 	uint16_t *faces = data.faces(sig, node.nvert);
@@ -289,7 +289,7 @@ static Color4b toRGB(Color4b e) {
 	return s;
 }
 
-void MeshDecoder::decodeColors() {
+void NxzDecoder::decodeColors() {
 
 	Color4b *colors = data.colors(sig, node.nvert);
 
@@ -357,7 +357,7 @@ static int prev_(int t) {
 	return t;
 }
 
-void MeshDecoder::decodeFaces(int nface, uint16_t *faces) {
+void NxzDecoder::decodeFaces(int nface, uint16_t *faces) {
 
 	bool hasTextures = sig.vertex.hasTextures();
 
@@ -516,7 +516,7 @@ void MeshDecoder::decodeFaces(int nface, uint16_t *faces) {
 	}
 }
 
-int MeshDecoder::decodeVertex(const Point3i &predicted, const Point2i &texpredicted, BitStream &bitstream, int diff, int tdiff) {
+int NxzDecoder::decodeVertex(const Point3i &predicted, const Point2i &texpredicted, BitStream &bitstream, int diff, int tdiff) {
 
 	static int count = 0;
 	count++;
@@ -561,7 +561,7 @@ int MeshDecoder::decodeVertex(const Point3i &predicted, const Point2i &texpredic
 	return v;
 }
 
-int MeshDecoder::decodeDiff(uchar diff, BitStream &stream) {
+int NxzDecoder::decodeDiff(uchar diff, BitStream &stream) {
 	if(diff == 0)
 		return 0;
 
