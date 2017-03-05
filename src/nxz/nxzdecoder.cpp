@@ -15,6 +15,8 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License (http://www.gnu.org/licenses/gpl.txt)
 for more details.
 */
+
+#if 0
 #include <algorithm>    // std::shuffle
 #include <array>        // std::array
 #include <random>       // std::default_random_engine
@@ -576,3 +578,4 @@ int NxzDecoder::decodeDiff(uchar diff, BitStream &stream) {
 	return val;
 }
 
+#endif

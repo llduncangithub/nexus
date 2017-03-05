@@ -15,12 +15,14 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License (http://www.gnu.org/licenses/gpl.txt)
 for more details.
 */
+
+#include <assert.h>
 #include <deque>
 #include <algorithm>
 
-#include <QTime>
+//#include <QTime>
 
-#include "../nxszip/tunstall.h"
+#include "tunstall.h"
 #include "../nxszip/fpu_precision.h"
 #include "nxzencoder.h"
 
@@ -33,31 +35,260 @@ static int ilog2(uint64_t p) {
 	return k;
 }
 
+
+NxzEncoder::NxzEncoder(uint32_t _nvert, uint32_t _nface):
+	flags(0), nvert(_nvert), nface(_nface),
+	coord_o(2147483647), uv_o(2147483647), coord_q(0), uv_q(0), coord_bits(12), uv_bits(12), norm_bits(10),
+	coord_size(0), normal_size(0), color_size(0), face_size(0), uv_size(0) {
+
+	color_bits[0] = color_bits[1] = color_bits[2] = color_bits[3] = 6;
+	qcoords.resize(nvert);
+	index.resize(nface*3);
+}
+
+
+/* TODO: euristic for point clouds should be: about 1/10 of nearest neighbor.
+  for now just use volume and number of points
+  could also quantize to find a side where the points halve and use 1/10 */
+
+void NxzEncoder::addCoords(float *buffer, float q, Point3f o) {
+	flags |= COORD;
+	Point3f *coords = (Point3f *)buffer;
+
+	if(q == 0) {
+		Point3f max(-FLT_MAX), min(FLT_MAX);
+		for(uint32_t i = 0; i < nvert; i++) {
+			min.setMin(coords[i]);
+			max.setMax(coords[i]);
+		}
+		max -= min;
+		q = pow(max[0]*max[1]*max[2], 2.0/3.0)/nvert;
+		if(o == Point3f(FLT_MAX))
+			o = min;
+	}
+	if(o == Point3f(FLT_MAX)) {
+		for(uint32_t i = 0; i < nvert; i++)
+			o.setMin(coords[i]);
+	}
+
+	coord_q = q;
+
+	Point3i cmax(-2147483647);
+	for(uint32_t i = 0; i < nvert; i++) {
+		Point3i &q = qcoords[i];
+		Point3f &p = coords[i];
+		for(int k = 0; k < 3; k++)
+			q[k] = floor((p[k] - o[k] + coord_q/2.0f)/coord_q);
+	}
+	setCoordBits();
+}
+
+/* if not q specified use 1/10th of average leght of edge  */
+void NxzEncoder::addCoords(float *buffer, uint32_t *_index, float q, Point3f o) {
+	flags |= COORD;
+	Point3f *coords = (Point3f *)buffer;
+	if(q == 0) {
+		double average = 0; //for precision when using large number of faces
+		for(uint32_t f = 0; f < nface*3; f += 3)
+			average += (coords[index[f]] - coords[index[f+1]]).norm();
+		q = (float)(average/nface)/10.0f;
+	}
+	addCoords(buffer, q, o);
+
+	flags |= INDEX;
+	index.resize(nface*3);
+	memcpy(_index, &*index.begin(), nface*12);
+}
+
+void NxzEncoder::addCoords(float *buffer, uint16_t *_index, float q, Point3f o) {
+	vector<uint32_t> tmp(nface*3);
+	for(uint32_t i = 0; i < nvert*3; i++)
+		tmp[i] = _index[i];
+	addCoords(buffer, &*tmp.begin(), q, o);
+}
+
+
+//you do the quantization step
+void NxzEncoder::addCoords(int *buffer) {
+	flags |= COORD;
+	memcpy(buffer, &*qcoords.begin(), nvert*12);
+	setCoordBits();
+}
+
+void NxzEncoder::addCoords(int *buffer, uint32_t *_index) {
+	addCoords(buffer);
+
+	flags |= INDEX;
+	memcpy(_index, &*index.begin(), nface*12);
+}
+
+void NxzEncoder::addCoords(int *buffer, uint16_t *_index) {
+	vector<uint32_t> tmp(nface*3);
+	for(uint32_t i = 0; i < nface*3; i++)
+		tmp[i] = _index[i];
+	addCoords(buffer, &*tmp.begin());
+}
+
+void NxzEncoder::setCoordBits() {
+	for(auto &q: qcoords)
+		coord_o.setMin(q);
+
+	Point3i cmax(-2147483647);
+	for(auto &q: qcoords) {
+		q -= coord_o;
+		cmax.setMax(q);
+	}
+
+	coord_bits = 1+std::max(std::max(ilog2(cmax[0]), ilog2(cmax[1])), ilog2(cmax[2]));
+	assert(coord_bits < 22);
+}
+
+
+/* NORMALS */
+
+
+void NxzEncoder::addNormals(float *buffer, int bits) {
+	flags |= NORMAL;
+	qnormals.resize(nvert);
+	norm_bits = bits;
+	norm_q = pow(2, -bits+1);
+	int qmax = 1<<(bits-1);
+
+	Point3f *normals = (Point3f *)buffer;
+	for(uint32_t i = 0; i < nvert; i++) {
+		Point3i &qn = qnormals[i];
+		Point3f &n = normals[i];
+		for(int k = 0; k < 3; k++) {
+			qn[k] = (int)std::round(n[k]/norm_q);
+			if(qn[k] > qmax) qn[k] = qmax;
+			if(qn[k] < -qmax) qn[k] = -qmax;
+		}
+	}
+}
+
+void NxzEncoder::addNormals(int16_t *buffer, int bits) {
+	assert(bits <= 17);
+	vector<float> tmp(nvert*3);
+	for(uint32_t i = 0; i < nvert*3; i++)
+		tmp[i] = buffer[i]/32767.0f;
+	addNormals(&*tmp.begin(), bits);
+}
+
+/* COLORS */
+
+void NxzEncoder::addColors(unsigned char *buffer, int lumabits, int chromabits, int alphabits) {
+	flags |= COLOR;
+	color_bits[0] = lumabits;
+	color_bits[1] = color_bits[2] = chromabits;
+	color_bits[3] = alphabits;
+	for(int k = 0; k < 4; k++)
+		color_q[k] = pow(1, -color_bits[k]);
+
+	qcolors.resize(nvert);
+	memcpy(buffer, &*qcolors.begin(), nvert*4);
+	for(auto &c: qcolors) {
+		c = c.toYCC();
+		for(int k = 0; k < 4; k++)
+			c[k] = (int)floor((c[k] + color_q[k]/2.0f)/color_q[k]);
+	}
+}
+
+void NxzEncoder::addUV(float *buffer, float q) {
+	flags |= UV;
+	if(q == 0) q = pow(2, -12);
+	uv_q = q;
+	quvs.resize(nvert);
+	Point3f *uvs = (Point3f *)buffer;
+	for(uint32_t i = 0; i < nvert; i++) {
+		quvs[i][0] = (int)round(uvs[i][0]/uv_q);
+		quvs[i][1] = (int)round(uvs[i][1]/uv_q);
+	}
+
+	for(auto &q: quvs)
+		uv_o.setMin(q);
+
+	Point2i cmax(-2147483647);
+	for(auto &q: quvs) {
+		q -= uv_o;
+		cmax.setMax(q);
+	}
+	uv_bits = 1 + std::max(ilog2(cmax[0]), ilog2(cmax[1]));
+}
+
+void NxzEncoder::addData(float *buffer, float q, float offset) {
+	flags |= DATA + qdatas.size();
+	qdatas.resize(qdatas.size()+1);
+	auto &qdata = qdatas.back();
+	qdata.resize(nvert);
+	for(uint32_t i = 0; i < nvert; i++)
+		qdata[i] = (int)round((buffer[i] - offset)/q);
+	data_q.push_back(q);
+
+	setDataBits();
+}
+
+void NxzEncoder::addData(int *buffer) {
+	flags |= DATA + qdatas.size();
+	qdatas.resize(qdatas.size()+1);
+	auto &qdata = qdatas.back();
+	qdata.resize(nvert);
+	memcpy(buffer, &*qdata.begin(), nvert*4);
+	data_q.push_back(1.0f);
+
+	setDataBits();
+}
+
+void NxzEncoder::setDataBits() {
+	int min = 2147483647;
+	for(auto &q: qdatas.back())
+		if(q < min) min = q;
+	data_o.push_back(min);
+
+	int cmax(-2147483647);
+	for(auto &q: qdatas.back()) {
+		q -= min;
+		if(q > cmax) cmax = q;
+	}
+	data_bits.push_back(1 + ilog2(cmax));
+}
+
+
+
 void NxzEncoder::encode() {
 	FpuPrecision::store();
 	FpuPrecision::setFloat();
 
 	stream.reserve(nvert);
 
-	quantize();
+	stream.write<int>(flags);
 
-	if(sig.face.hasIndex())
-		encodeFaces();
-	else {
-		encodeCoordinates();
+	if(flags & NORMAL)
+		stream.write<char>(norm_bits);
+
+	if(flags & COLOR)
+		for(int k = 0; k < 4; k++)
+			stream.write<char>(color_bits[k]);
+
+
+	if(flags & UV) {
+		stream.write<int>(uv_o[0]);
+		stream.write<int>(uv_o[1]);
+		stream.write<float>(uv_q);
+		stream.write<char>(uv_bits);
 	}
 
-	if(sig.vertex.hasNormals())
-		encodeNormals();
+	for(uint32_t i = 0; i < qdatas.size(); i++) {
+		stream.write<int>(data_o[i]);
+		stream.write<float>(data_q[i]);
+		stream.write<char>(data_bits[i]);
+	}
 
-	if(sig.vertex.hasColors())
-		encodeColors();
+	if(nface)
+		encodeMesh();
+	else
+		encodePointCloud();
 
-
-	if(!sig.face.hasIndex())
-		node.nvert = zpoints.size(); //needed because quantizatiojn might remove some vertices in point clouds.
-
-/*
+	/*
 	cout << "Coord bpv: " << coord_size*8/(float)node.nvert << endl;
 	cout << "Face bpv: " << face_size*8/(float)node.nvert << endl;
 	cout << "Norm bpv: " << normal_size*8/(float)node.nvert << endl;
@@ -66,103 +297,77 @@ void NxzEncoder::encode() {
 	FpuPrecision::restore();
 }
 
-void NxzEncoder::quantizeCoords() {
-	vcg::Point2i cmin(2147483647, 2147483647), cmax(-2147483648, -2147483648);
-
-	qpoints.resize(node.nvert);
-	for(unsigned int i = 0; i < node.nvert; i++) {
-		Point3f &p = coords[i];
-		Point3i &q = qpoints[i];
-		for(int k = 0; k < 3; k++) {
-			q[k] = (int)floor(p[k]/coord_q + 0.5f);
-			if(cmin[k] > q[k]) cmin[k] = q[k];
-			if(cmax[k] < q[k]) cmax[k] = q[k];
-		}
+void NxzEncoder::encodePointCloud() {
+	zpoints.resize(nvert);
+	for(uint32_t i = 0; i < nvert; i++) {
+		Point3i &q = qcoords[i];
+		zpoints[i] = ZPoint(q[0], q[1], q[2], coord_bits, i);
 	}
-	for(auto &q: qpoints)
-		q -= cmin;
+	sort(zpoints.rbegin(), zpoints.rend());//, greater<ZPoint>());
 
-	cmax -= cmin;
-	coord_bits = 1+std::max(std::max(ilog2(cmax[0]), ilog2(cmax[1])), ilog2(cmax[2]));
-	assert(d[0] < (1<<coord_bits));
-	assert(d[1] < (1<<coord_bits));
-	assert(d[2] < (1<<coord_bits));
-
-	stream.write<int>(cmin[0]);
-	stream.write<int>(cmin[1]);
-	stream.write<int>(cmin[2]);
-	stream.write<char>(coord_q);
-	stream.write<char>(coord_bits);
-}
-
-void NxzEncoder::quantizeTexCoords() {
-	vcg::Point2i tmin(2147483647,2147483647), tmax(-2147483648, -2147483648);
-
-	qtexcoords.resize(node.nvert);
-	for(unsigned int i = 0; i < node.nvert; i++) {
-		Point2f &p = uv[i];
-		Point2i &q = qtexcoords[i];
-		for(int k = 0; k < 2; k++) {
-			q[k] = (int)floor(p[k]/uv_q + 0.5f);
-			if(tmin[k] > q[k]) tmin[k] = q[k];
-			if(tmax[k] < q[k]) tmax[k] = q[k];
-		}
+	//reorder attributes
+	if(flags & NORMAL) {
+		vector<Point3i> tmp(nvert);
+		for(uint32_t i = 0; i < nvert; i++)
+			tmp[i] = qnormals[zpoints[i].pos];
+		swap(tmp, qnormals);
 	}
-	for(auto &t: qtexcoords)
-		t -= tmin;
+	if(flags & COLOR) {
+		vector<Color4b> tmp(nvert);
+		for(uint32_t i = 0; i < nvert; i++)
+			tmp[i] = qcolors[zpoints[i].pos];
+		swap(tmp, qcolors);
+	}
+	if(flags & UV) {
+		vector<Point2i> tmp(nvert);
+		for(uint32_t i = 0; i < nvert; i++)
+			tmp[i] = quvs[zpoints[i].pos];
+		swap(tmp, quvs);
+	}
+	for(auto &qdata: qdatas) {
+		vector<int> tmp(nvert);
+		for(uint32_t i = 0; i < nvert; i++)
+			tmp[i] = qdata[zpoints[i].pos];
+		swap(tmp, qdata);
+	}
 
-	tmax -= tmin;
-	uv_bits = 1+std::max(ilog2(tmax[0]), ilog2(tmax[1]));
-	assert(d[0] < (1<<uv_bits));
-	assert(d[1] < (1<<uv_bits));
-
-	stream.write<int>(tmin[0]);
-	stream.write<int>(tmin[1]);
-	stream.write<char>(uv_q);
-	stream.write<char>(uv_bits);
-}
-
-void NxzEncoder::quantize() {
-	quantizeCoords();
-	if(sig.vertex.hasTextures())
-		quantizeTexCoords();
-
-	if(!sig.face.hasIndex()) {
-
-		zpoints.resize(node.nvert);
-		for(int i = 0; i < node.nvert; i++) {
-			Point3i q = qpoints[i];
-			zpoints[i] = ZPoint(q[0], q[1], q[2], coord_bits, i);
-		}
-
-		sort(zpoints.rbegin(), zpoints.rend());//, greater<ZPoint>());
-
-		//we need to remove duplicated vertices and save back ordering
-		//for each vertex order contains its new position in zpoints
-		int count = 0;
-
-		for(unsigned int i = 1; i < zpoints.size(); i++) {
-			if(zpoints[i] != zpoints[count]) {
-				count++;
-
-				zpoints[count] = zpoints[i];
-			}
-		}
+	//we need to remove duplicated vertices
+	int count = 0;
+	for(unsigned int i = 1; i < nvert; i++) {
+		if(zpoints[i] == zpoints[count])
+			continue;
 		count++;
-		zpoints.resize(count);
+		zpoints[count] = zpoints[i];
+
+		if(qnormals.size())      qnormals[count] = qnormals[i];
+		if(qcolors.size())       qcolors[count] = qcolors[i];
+		if(quvs.size())          quvs[count] = quvs[i];
+		for(auto &qdata: qdatas) qdata[count] = qdata[i];
 	}
+	count++;
+
+	zpoints.resize(count);
+	if(qnormals.size())      qnormals.resize(count);
+	if(qcolors.size())       qcolors.resize(count);
+	if(quvs.size())          quvs.resize(count);
+	for(auto &qdata: qdatas) qdata.resize(count);
+
+	nvert = count;
+	stream.write<int>(nvert);
+
+	encodeCoords();
+	if(flags & NORMAL) encodeNormals();
+	if(flags & COLOR)  encodeColors();
+	if(flags & UV)     encodeUvs();
+	if(flags & DATA)   encodeDatas();
 }
 
-void NxzEncoder::encodeCoordinates() {
-
-	assert(!sig.face.hasIndex());
-
+void NxzEncoder::encodeCoords() {
 	vector<uchar> diffs;
-	BitStream bitstream(node.nvert/2);
-
+	BitStream bitstream(nvert/2);
 	bitstream.write(zpoints[0].bits, coord_bits*3);
 
-	for(int pos = 1; pos < zpoints.size(); pos++) {
+	for(uint32_t pos = 1; pos < nvert; pos++) {
 		ZPoint &p = zpoints[pos-1]; //previous point
 		ZPoint &q = zpoints[pos]; //current point
 		uchar d = p.difference(q);
@@ -173,221 +378,248 @@ void NxzEncoder::encodeCoordinates() {
 
 	int start = stream.size();
 
-	bitstream.flush();
+	Tunstall::compress(stream, &*diffs.begin(), diffs.size());
 	stream.write(bitstream);
-
-	Tunstall tunstall;
-	tunstall.compress(stream, &*diffs.begin(), diffs.size());
 
 	coord_size = stream.size() - start;
 }
 
+void NxzEncoder::encodeNormals() {
+	//TODO is it worth having diffs for component?
+	vector<uchar> diffs;
+	vector<uchar> signs;
+	BitStream bitstream(nvert/64);
+
+	for(int k = 0; k < 2; k++) {
+		int old = qnormals[0][k];
+		bitstream.write(Tunstall::toUint(old), norm_bits);
+		for(unsigned int i = 1; i < qnormals.size(); i++) {
+			int d = qnormals[i][k] -old;
+			encodeDiff(diffs, bitstream, d);
+			old = qnormals[i][k];
+		}
+	}
+	for(uint32_t i = 0; i < qnormals.size(); i++) {
+		bool signbit = qnormals[i][2] > 0;
+		signs.push_back(signbit);
+	}
+	int start = stream.size();
+
+	Tunstall::compress(stream, &*diffs.begin(), diffs.size());
+	//TODO worth compressing, dont thinks so.?
+	Tunstall::compress(stream, &*signs.begin(), signs.size());
+	stream.write(bitstream);
+
+	normal_size = stream.size() - start;
+}
+
+void NxzEncoder::encodeColors() {
+	BitStream bitstream(nvert/2);
+
+	int start = stream.size();
+	for(int k = 0; k < 4; k++) {
+		vector<uchar> diffs;
+
+		int old = qcolors[0][k];
+		bitstream.write(old, color_bits[k]);
+		for(uint32_t i = 1; i < nvert; i++) {
+			int d = qcolors[i][k] - old;
+			encodeDiff(diffs, bitstream, d);
+			old = qcolors[i][k];
+		}
+		Tunstall::compress(stream, &*diffs.begin(), diffs.size());
+	}
+	stream.write(bitstream);
+	color_size = stream.size() - start;
+}
+
+
+void NxzEncoder::encodeUvs() {
+	BitStream bitstream(nvert/2);
+
+	int start = stream.size();
+	for(int k = 0; k < 2; k++) {
+		vector<uchar> diffs;
+		int old = quvs[0][k];
+		bitstream.write(old, uv_bits);
+		for(uint32_t i = 1; i < nvert; i++) {
+			int d = quvs[i][k] - old;
+			encodeDiff(diffs, bitstream, d);
+			old = quvs[i][k];
+		}
+		Tunstall::compress(stream, &*diffs.begin(), diffs.size());
+	}
+	stream.write(bitstream);
+	uv_size = stream.size() - start;
+}
+
+void NxzEncoder::encodeDatas() {
+	for(uint32_t k = 0; k < qdatas.size(); k++) {
+		auto &qdata = qdatas[k];
+		BitStream bitstream(nvert/2);
+		vector<uchar> diffs;
+
+		int start = stream.size();
+		int old = qdata[0];
+		bitstream.write(old, data_bits[k]);
+		for(uint32_t i = 1; i < nvert; i++) {
+			int d = qdata[i] - old;
+			encodeDiff(diffs, bitstream, d);
+			old = qdata[i];
+		}
+		Tunstall::compress(stream, &*diffs.begin(), diffs.size());
+
+		stream.write(bitstream);
+		data_size.push_back(stream.size() - start);
+	}
+}
+
+
 
 //compact in place faces in data, update patches information, compute topology and encode each patch.
-void NxzEncoder::encodeFaces() {
+void NxzEncoder::encodeMesh() {
+	//TODO what if nface == 0?
 
-	if(!node.nface) return;
+	encoded.resize(nvert, -1);
+	last.reserve(nvert);
+	order.reserve(nvert);
 
-	encoded.resize(node.nvert, -1);
-	last.reserve(node.nvert);
-	order.reserve(node.nvert);
-
-	uint16_t *triangles = data.faces(sig, node.nvert);
-
+	if(!groups.size()) groups.push_back(nface);
 	//remove degenerate faces
-	int start =  0;
-	int count = 0;
-	for(int p = node.first_patch; p < node.last_patch(); p++) {
-		Patch &patch = patches[p];
-		uint end = patch.triangle_offset;
-		for(unsigned int i = start; i < end; i++) {
-			uint16_t *face = triangles + i*3;
+	uint32_t start =  0;
+	uint32_t count = 0;
+	for(uint32_t &end: groups) {
+		for(uint32_t i = start; i < end; i++) {
+			uint32_t *face = &index[i*3];
 
 			if(face[0] == face[1] || face[0] == face[2] || face[1] == face[2])
 				continue;
 
-			uint16_t *dest = triangles + count*3;
 			if(count != i) {
+				uint32_t *dest = &index[count*3];
 				dest[0] = face[0];
 				dest[1] = face[1];
 				dest[2] = face[2];
 			}
 			count++;
 		}
-		patch.triangle_offset = count;
 		start = end;
+		end = count;
 	}
-	node.nface = count;
+	index.resize(count*3);
+	nface = count;
 
+	stream.write<int>(nvert);
+	stream.write<int>(nface);
 
+	index_bits = ilog2(nface);
+
+	if(flags & NORMAL) {
+		markBoundary(); //mark boundary points on original vertices.
+		vector<Point3i> estimated(nvert);
+		computeNormals(estimated);
+		for(uint32_t i = 0; i < nvert; i++) {
+			qnormals[i][0] -= estimated[i][0];
+			qnormals[i][1] -= estimated[i][1];
+			qnormals[i][2] = (estimated[i][2]*qnormals[i][2] < 0)?1:0;
+		}
+	}
+
+	BitStream bitstream(nface);
 	start =  0;
-	//	encodeFaces(0, node.nface);
-	for(int p = node.first_patch; p < node.last_patch(); p++) {
-		Patch &patch = patches[p];
-		uint end = patch.triangle_offset;
-		encodeFaces(start, end);
+	for(uint32_t &end: groups) {
+		encodeFaces(bitstream, start, end);
 		start = end;
 	}
+	Tunstall::compress(stream, &*clers.begin(), clers.size());
+	Tunstall::compress(stream, &*dcoords.begin(), nvert);
+	if(flags & NORMAL) Tunstall::compress(stream, &*dnormals.begin(), nvert);
+	if(flags & COLOR)
+		for(int k = 0; k < 4; k++)
+			Tunstall::compress(stream, &*dcolors[k].begin(), nvert);
+
+	if(flags & UV)     Tunstall::compress(stream, &*duvs.begin(), nvert);
+	for(auto &ddata: ddatas)
+		Tunstall::compress(stream, &*ddata.begin(), nvert);
+	stream.write(bitstream);
 }
 
-void NxzEncoder::encodeNormals() {
-
-	int side = 1<<(16 - norm_q);
+/*
+void NxzEncoder::encodeMeshNormals() {
 
 	vector<uchar> diffs;
 	vector<uchar> signs;
-	BitStream bitstream(node.nvert/64);
+	BitStream bitstream(nvert/64);
 
-	Point3s *normals = data.normals(sig, node.nvert);
+	markBoundary(); //mark boundary points on original vertices.
+	vector<Point3i> estimated_normals(nvert);
+	computeNormals(estimated_normals);
 
-	if(!sig.face.hasIndex()) { //point cloud
-
-		int step = (1<<(16 - norm_q));
-
-		//point cloud: compute differences from previous normal
-		for(int k = 0; k < 2; k++) {
-			int on = 0; //old color
-			for(unsigned int i = 0; i < zpoints.size(); i++) {
-				Point3s c = normals[zpoints[i].pos];
-				int n = c[k];
-				n = n/step;
-				//n = (n/(float)step + 0.5);
-				//if(n >= max_value) n = max_value-1;
-				//if(n <= -max_value) n = -max_value+1;
-				int d = n - on;
-				encodeDiff(diffs, bitstream, d);
-				on = n;
-			}
+	for(unsigned int i = 0; i < nvert; i++) {
+		int pos = order[i];
+		if(!boundary[pos]) continue;
+		Point3i &computed = estimated_normals[pos];
+		Point3i &original = qnormals[pos];
+		for(int comp = 0; comp < 2; comp++) {
+			int d = (int)(original[comp]/side - computed[comp]/side); //act1ual value - predicted
+			encodeDiff(diffs, bitstream, d);
 		}
-		for(unsigned int i = 0; i < zpoints.size(); i++) {
-			Point3s c = normals[zpoints[i].pos];
-			bool signbit = c[2] > 0;
-			signs.push_back(signbit);
-		}
-
-	} else { //mesh
-
-		markBoundary(); //mark boundary points on original vertices.
-		vector<Point3s> estimated_normals(node.nvert); //this are computed using the original indexing.
-		computeNormals(estimated_normals);
-
-		for(unsigned int i = 0; i < qpoints.size(); i++) {
-			int pos = order[i];
-			if(!boundary[pos]) continue;
-			Point3s &computed = estimated_normals[pos];
-			Point3s &original = normals[pos];
-			for(int comp = 0; comp < 2; comp++) {
-				int d = (int)(original[comp]/side - computed[comp]/side); //act1ual value - predicted
-				encodeDiff(diffs, bitstream, d);
-			}
-			bool signbit = (computed[2]*original[2] < 0);
-			signs.push_back(signbit);
-		}
+		bool signbit = (computed[2]*original[2] < 0);
+		signs.push_back(signbit);
 	}
+
 	int start = stream.size();
 
-	stream.write<char>(norm_q);
-	Tunstall tunstall;
-	tunstall.compress(stream, &*diffs.begin(), diffs.size());
-	Tunstall tunstall1;
-	tunstall1.compress(stream, &*signs.begin(), signs.size());
-	bitstream.flush();
+	Tunstall::compress(stream, &*diffs.begin(), diffs.size());
+	Tunstall::compress(stream, &*signs.begin(), signs.size());
 	stream.write(bitstream);
 
 	normal_size = stream.size() - start;
 }
-
+ */
 
 //how to determine if a vertex is a boundary without topology:
 //for each edge a vertex is in, add or subtract the id of the other vertex depending on order
 //for internal vertices sum is zero.
 //unless we have strange configurations and a lot of sfiga, zero wont happen. //TODO think about this
 void NxzEncoder::markBoundary() {
-	if(!sig.face.hasIndex()) {
-		boundary.resize(node.nvert, true);
-		return;
-	}
-	boundary.resize(node.nvert, false);
+	boundary.resize(nvert, false);
 
-	uint16_t *faces = data.faces(sig, node.nvert);
-	vector<int> count(node.nvert, 0);
-	for(int i = 0; i < node.nface; i++) {
-		uint16_t *f = faces + i*3;
+	vector<int> count(nvert, 0);
+	for(uint32_t i = 0; i < nface; i++) {
+		uint32_t *f = &index[i*3];
 		count[f[0]] += (int)f[1] - (int)f[2];
 		count[f[1]] += (int)f[2] - (int)f[0];
 		count[f[2]] += (int)f[0] - (int)f[1];
 	}
-	for(int i = 0; i < node.nvert; i++)
+	for(uint32_t i = 0; i < nvert; i++)
 		if(count[i] != 0)
 			boundary[i] = true;
 }
 
 
-void NxzEncoder::computeNormals(vector<Point3s> &estimated_normals) {
+void NxzEncoder::computeNormals(vector<Point3i> &estimated) {
+	estimated.resize(nvert, Point3i(0, 0, 0));
 
-	uint16_t *faces = data.faces(sig, node.nvert);
-	vector<Point3i> normals(node.nvert, Point3i(0, 0, 0));
-
-	for(int i = 0; i < node.nface; i++) {
-		uint16_t *face = faces + i*3;
-		Point3i &p0 = qpoints[face[0]];
-		Point3i &p1 = qpoints[face[1]];
-		Point3i &p2 = qpoints[face[2]];
+	for(uint32_t i = 0; i < nface; i++) {
+		uint32_t *face = &index[i*3];
+		Point3i &p0 = qcoords[face[0]];
+		Point3i &p1 = qcoords[face[1]];
+		Point3i &p2 = qcoords[face[2]];
 		Point3i n = (( p1 - p0) ^ (p2 - p0));
-		normals[face[0]] += n;
-		normals[face[1]] += n;
-		normals[face[2]] += n;
+		estimated[face[0]] += n;
+		estimated[face[1]] += n;
+		estimated[face[2]] += n;
 	}
 	//normalize
-	for(unsigned int i = 0; i < normals.size(); i++) {
-		Point3i &n = normals[i];
+	for(Point3i &n: estimated) {
 		float norm = sqrt(float((float)n[0]*n[0] + (float)n[1]*n[1] + (float)n[2]*n[2]));
-
-		for(int k = 0; k < 3; k++)
-			estimated_normals[i][k] = (int16_t)(n[k]*32767.0f/norm);
+		for(int k = 0; k < 2; k++)
+			n[k] = (int)std::round((n[k]/norm)/norm_q);
 	}
 }
 
-#define REVERSIBLEFAST 1
-static Color4b toYCC(Color4b s) {
-	Color4b e;
-
-#ifdef REVERSIBLEFAST
-	e[0] = s[1];
-	e[1] = s[2] - s[1];
-	e[2] = s[0] - s[1];
-	e[3] = s[3];
-	return e;
-#endif
-
-	e[0] =              0.299000*s[0] + 0.587000*s[1] + 0.114000*s[2];
-	e[1] = 128        - 0.168736*s[0] - 0.331264*s[1] + 0.500000*s[2];
-	e[2] = 128        + 0.500000*s[0] - 0.428688*s[1] - 0.081312*s[2];
-	e[3] = s[3];
-	return e;
-}
-
-static Color4b toRGB(Color4b e) {
-	Color4b s;
-#ifdef REVERSIBLEFAST
-	s[2] = e[1] + e[0];
-	s[0] = e[2] + e[0];
-	s[1] = e[0];
-	return s;
-#endif
-
-	int r = e[0]                        + 1.40200*(e[2] - 128);
-	int g = e[0] - 0.34414*(e[1] - 128) - 0.71414*(e[2] - 128);
-	int b = e[0] + 1.77200*(e[1] - 128);
-	s[3] = e[3];
-	s[0] = std::max(0, std::min(255, r));
-	s[1] = std::max(0, std::min(255, g));
-	s[2] = std::max(0, std::min(255, b));
-
-	return s;
-}
-
-
+/*
 void NxzEncoder::encodeColors() {
 
 	BitStream bitstream(node.nvert/2);
@@ -397,16 +629,16 @@ void NxzEncoder::encodeColors() {
 	for(int k = 0; k < 4; k++)
 		steps[k] = (1<<(8 - color_bits[k]));
 
-	if(sig.face.hasIndex()) {
-		vector<Color4b> qcolors(node.nvert);
-		for(unsigned int i = 0; i < node.nvert; i++) {
+
+		vector<Color4b> qcolors(nvert);
+		for(unsigned int i = 0; i < nvert; i++) {
 			for(int k = 0; k < 4; k++) {
 				qcolors[i][k] = colors[i][k]; ///steps[k]*steps[k]; AARRRGRGGH
 			}
 			qcolors[i] = toYCC(qcolors[i]);
 		}
 
-		for(int i = 0; i < node.nvert; i++) {
+		for(int i = 0; i < nvert; i++) {
 			Color4b &c = qcolors[order[i]];
 			int l = last[i];
 			Color4b b;
@@ -422,45 +654,84 @@ void NxzEncoder::encodeColors() {
 			}
 		}
 
-	} else {
-		int on[4] = {0, 0, 0, 0}; //old color
-		for(unsigned int i = 0; i < zpoints.size(); i++) {
-			for(int k = 0; k < 4; k++) {
-				int pos = zpoints[i].pos;
-				Color4b c = toYCC(colors[pos]);
-				int n = c[k];
 
-				n = n/steps[k];
-
-				int d = n - on[k];
-				encodeDiff(diffs[k], bitstream, d);
-				on[k] = n;
-			}
-		}
-	}
 
 	int start = stream.size();
 
 	for(int k = 0; k < 4; k++)
 		stream.write<char>(color_bits[k]);
 
-	for(int k = 0; k < 4; k++) {
-		Tunstall tunstall;
-		tunstall.compress(stream, &*diffs[k].begin(), diffs[k].size());
-	}
+	for(int k = 0; k < 4; k++)
+		Tunstall::compress(stream, &*diffs[k].begin(), diffs[k].size());
 
-	bitstream.flush();
 	stream.write(bitstream);
 
 	color_size = stream.size() - start;
-}
+} */
 
-void NxzEncoder::encodeTexCoords() {
-	Point2f *tex_coords = data.texCoords(sig, node.nvert);
+class McFace {
+public:
+	uint32_t f[3];
+	uint32_t t[3]; //topology: opposite face
+	uint32_t i[3]; //index in the opposite face of this face: faces[f.t[k]].t[f.i[k]] = f;
+	McFace(uint32_t v0 = 0, uint32_t v1 = 0, uint32_t v2 = 0) {
+		f[0] = v0; f[1] = v1; f[2] = v2;
+		t[0] = t[1] = t[2] = 0xffff;
+	}
+	bool operator<(const McFace &face) const {
+		if(f[0] < face.f[0]) return true;
+		if(f[0] > face.f[0]) return false;
+		if(f[1] < face.f[1]) return true;
+		if(f[1] > face.f[1]) return false;
+		return f[2] < face.f[2];
+	}
+	bool operator>(const McFace &face) const {
+		if(f[0] > face.f[0]) return true;
+		if(f[0] < face.f[0]) return false;
+		if(f[1] > face.f[1]) return true;
+		if(f[1] < face.f[1]) return false;
+		return f[2] > face.f[2];
+	}
+};
 
-	//
+class CEdge { //compression edges
+public:
+	uint32_t face;
+	uint32_t side; //opposited to side vertex of face
+	uint32_t prev, next;
+	bool deleted;
+	CEdge(uint32_t f = 0, uint32_t s = 0, uint32_t p = 0, uint32_t n = 0):
+		face(f), side(s), prev(p), next(n), deleted(false) {}
+};
 
-}
+
+class McEdge { //topology edges
+public:
+	uint32_t face, side;
+	uint32_t v0, v1;
+	bool inverted;
+	//McEdge(): inverted(false) {}
+	McEdge(uint32_t _face, uint32_t _side, uint32_t _v0, uint32_t _v1): face(_face), side(_side), inverted(false) {
+
+		if(_v0 < _v1) {
+			v0 = _v0; v1 = _v1;
+			inverted = false;
+		} else {
+			v1 = _v0; v0 = _v1;
+			inverted = true;
+		}
+	}
+	bool operator<(const McEdge &edge) const {
+		if(v0 < edge.v0) return true;
+		if(v0 > edge.v0) return false;
+		return v1 < edge.v1;
+	}
+	bool match(const McEdge &edge) {
+		if(inverted && edge.inverted) return false;
+		if(!inverted && !edge.inverted) return false;
+		return v0 == edge.v0 && v1 == edge.v1;
+	}
+};
 
 static void buildTopology(vector<McFace> &faces) {
 	//create topology;
@@ -477,13 +748,13 @@ static void buildTopology(vector<McFace> &faces) {
 	}
 	sort(edges.begin(), edges.end());
 
-	McEdge previous(0xffff, 0xffff, 0xffff, 0xffff);
+	McEdge previous(0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff);
 	for(unsigned int i = 0; i < edges.size(); i++) {
 		McEdge &edge = edges[i];
 		if(edge.match(previous)) {
-			uint16_t &edge_side_face = faces[edge.face].t[edge.side];
-			uint16_t &previous_side_face = faces[previous.face].t[previous.side];
-			if(edge_side_face == 0xffff && previous_side_face == 0xffff) {
+			uint32_t &edge_side_face = faces[edge.face].t[edge.side];
+			uint32_t &previous_side_face = faces[previous.face].t[previous.side];
+			if(edge_side_face == 0xffffffff && previous_side_face == 0xffffffff) {
 				edge_side_face = previous.face;
 				faces[edge.face].i[edge.side] = previous.side;
 				previous_side_face = edge.face;
@@ -504,23 +775,17 @@ static int prev_(int t) {
 	return t;
 }
 
-void NxzEncoder::encodeFaces(int start, int end) {
+void NxzEncoder::encodeFaces(BitStream &bitstream, int start, int end) {
 	int useless = 0;
 
 	vector<McFace> faces(end - start);
-	uint16_t *triangles = data.faces(sig, node.nvert);
 	for(int i = start; i < end; i++) {
-		uint16_t * f = triangles + i*3;
+		uint32_t * f = &index[i*3];
 		faces[i - start] = McFace(f[0], f[1], f[2]);
 		assert(f[0] != f[1] && f[1] != f[2] && f[2] != f[0]);
 	}
 
 	buildTopology(faces);
-
-	vector<uchar> clers;
-	vector<uchar> diffs;
-	vector<uchar> tdiffs;
-	BitStream bitstream(2*faces.size());
 
 	unsigned int current = 0;          //keep track of connected component start
 
@@ -528,12 +793,9 @@ void NxzEncoder::encodeFaces(int start, int end) {
 	deque<int> faceorder;
 	vector<CEdge> front;
 
-	reorder.resize(node.nvert);
-
 	vector<bool> visited(faces.size(), false);
 	unsigned int totfaces = faces.size();
 
-	bool hasTextures = sig.vertex.hasTextures();
 	//	vector<int> test_faces;
 	int counting = 0;
 	while(totfaces > 0) {
@@ -548,21 +810,20 @@ void NxzEncoder::encodeFaces(int start, int end) {
 			//encode first face: 3 vertices indexes, and add edges
 			unsigned int current_edge = front.size();
 			McFace &face = faces[current];
-			Point3i estimated(0, 0, 0);
-			Point2i texestimated(0, 0);
+			Point3i coord_estimated(0, 0, 0);
+			Point2i uv_estimated(0, 0);
 			int last_index = -1;
 			for(int k = 0; k < 3; k++) {
 				int index = face.f[k];
 				last.push_back(last_index);
 
+				encodeVertex(index, coord_estimated, uv_estimated, bitstream, last_index);
+
 				last_index = index;
-				encodeVertex(index, estimated, texestimated, bitstream, diffs, tdiffs);
-				Point3i &p = qpoints[index];
-				estimated = p;
-				if(hasTextures) {
-					Point2i &pt = qtexcoords[index];
-					texestimated = pt;
-				}
+				coord_estimated = qcoords[index];
+				if(flags & UV)
+					uv_estimated = qtexcoords[index];
+
 				faceorder.push_back(front.size());
 				front.push_back(CEdge(current, k, current_edge + prev_(k), current_edge + next_(k)));
 			}
@@ -585,20 +846,16 @@ void NxzEncoder::encodeFaces(int start, int end) {
 		e.deleted = true;
 
 		//opposite face is the triangle we are encoding
-		uint16_t opposite_face = faces[e.face].t[e.side];
+		uint32_t opposite_face = faces[e.face].t[e.side];
 		int opposite_side = faces[e.face].i[e.side];
 
-		if(opposite_face == 0xffff || visited[opposite_face]) { //boundary edge or glue
+		if(opposite_face == 0xffffffff || visited[opposite_face]) { //boundary edge or glue
 			clers.push_back(BOUNDARY);
 			continue;
 		}
 
 		assert(opposite_face < faces.size());
 		McFace &face = faces[opposite_face];
-		//		test_faces.push_back(face.f[0]);
-		//		test_faces.push_back(face.f[1]);
-		//		test_faces.push_back(face.f[2]);
-
 
 		int k2 = opposite_side;
 		int k0 = next_(k2);
@@ -656,14 +913,10 @@ void NxzEncoder::encodeFaces(int start, int end) {
 			//we need to estimate opposite direction using v0 + v1 -
 			int v2 = faces[e.face].f[e.side];
 
-			Point3i p0 = qpoints[v0];
-			Point3i p1 = qpoints[v1];
-			Point3i p2 = qpoints[v2];
-
-			Point3i predicted = p0 + p1 - p2;
-			Point2i texpredicted(0, 0);
-			if(hasTextures)
-				texpredicted = qtexcoords[v0] + qtexcoords[v1] - qtexcoords[v2];
+			Point3i coord_predicted = qcoords[v0] + qcoords[v1] - qcoords[v2];
+			Point2i uv_predicted(0, 0);
+			if(flags & UV)
+				uv_predicted = qtexcoords[v0] + qtexcoords[v1] - qtexcoords[v2];
 
 
 			if(encoded[opposite] == -1) {//only first time
@@ -671,7 +924,7 @@ void NxzEncoder::encodeFaces(int start, int end) {
 			} else
 				useless++;  //we encoutered it already.
 
-			encodeVertex(opposite, predicted, texpredicted, bitstream, diffs, tdiffs);
+			encodeVertex(opposite, coord_predicted, uv_predicted, bitstream, v0);
 
 
 			previous_edge.next = first_edge;
@@ -708,39 +961,29 @@ void NxzEncoder::encodeFaces(int start, int end) {
 	}
 */
 
-
+/*
 
 	int stream_start = stream.size();
-	Tunstall tunstall;
-	tunstall.compress(stream, &*clers.begin(), clers.size());
+	Tunstall::compress(stream, &*clers.begin(), clers.size());
 
 	face_size += stream.size() - stream_start;
 	stream_start = stream.size();
 
-	Tunstall tunstall1;
-	tunstall1.compress(stream, &*diffs.begin(), diffs.size());
+	Tunstall::compress(stream, &*diffs.begin(), diffs.size());
 	if(sig.vertex.hasTextures()) {
 		int bits =0;
 		for(auto &n: tdiffs) {
 			bits += 2*n;
-//			cout << "N: " << (int)n << endl;
+			//			cout << "N: " << (int)n << endl;
 		}
-		Tunstall tunstall2;
-		int sbits = 8*tunstall2.compress(stream, &*tdiffs.begin(), tdiffs.size());
+		Tunstall::compress(stream, &*tdiffs.begin(), tdiffs.size());
 
 
-/*		cout << "diff stream: " << sbits/(float)tdiffs.size() << endl;
-		cout << " tdiffs: " << tdiffs.size()/(float)faces.size() << endl;
-		cout << "stream bits: " << bits/(float)faces.size() << endl;
-				bits += sbits;
-		cout << "Bit per face: " << bits/(float)faces.size() << endl;
-		cout << endl; */
+
 	}
-
-	bitstream.flush();
 	stream.write(bitstream);
 
-	coord_size += stream.size() - stream_start;
+	coord_size += stream.size() - stream_start; */
 }
 
 int needed(int v) {
@@ -757,29 +1000,24 @@ int needed(int v) {
 	return n;
 }
 
-void NxzEncoder::encodeVertex(int target, const Point3i &predicted, const Point2i &texpredicted, BitStream &bitstream,
-							   vector<uchar> &diffs, vector<uchar> &tdiffs) {
+void NxzEncoder::encodeVertex(int target, const Point3i &predicted, const Point2i &texpredicted, BitStream &bitstream, int last) {
 
-
-	static int count = 0;
-	count++;
 	//compute how much would it take to save vertex information:
 	//we need to estimate opposite direction using v0 + v1 -
 
-	assert(target < node.nvert);
+	assert(target < nvert);
 	if(encoded[target] != -1) { //write index of target.
-		diffs.push_back(0);
+		dcoords.push_back(0);
 		uint64_t bits = encoded[target];
-		bitstream.write(bits, 16);
+		bitstream.write(bits, index_bits); //this should be related to nvert, actually.
 		return;
 	}
-	assert(order.size() < node.nvert);
+	assert(order.size() < nvert);
 	encoded[target] = order.size();
-	reorder[target] = order.size();
 	order.push_back(target);
 
 	{
-		Point3i d = qpoints[target] - predicted; //this is the estimated point.
+		Point3i d = qcoords[target] - predicted; //this is the estimated point.
 		int diff = 0;
 		for(int k = 0; k < 3; k++) {
 			int n = needed(d[k]);
@@ -790,17 +1028,40 @@ void NxzEncoder::encodeVertex(int target, const Point3i &predicted, const Point2
 		for(int k = 0; k < 3; k++)
 			d[k] += 1<<(diff-1); //bring it into the positive.
 
-		//int diff = 1+std::max(ilog2(d[0]), std::max(ilog2(d[1]), ilog2(d[2])));
-
-		diffs.push_back(diff);
+		dcoords.push_back(diff);
 		bitstream.write(d[0], diff);
 		bitstream.write(d[1], diff);
 		bitstream.write(d[2], diff);
 	}
 
-	if(sig.vertex.hasTextures()) {
-		Point2i dt = qtexcoords[target] - texpredicted; //this is the estimated point
+	if(flags & NORMAL) {
+		Point3i &d = qnormals[target];
+		if(boundary[target]) {
+			int diff = 0;
+			for(int k = 0; k < 2; k++) {
+				int n = needed(d[k]);
+				if(n > diff)
+					diff = n;
+			}
+			assert(diff > 0);
+			for(int k = 0; k < 2; k++)
+				d[k] += 1<<(diff-1); //bring it into the positive.
+			dnormals.push_back(diff);
+			bitstream.write(d[0], diff);
+			bitstream.write(d[1], diff);
+			bitstream.write(d[2], 1);
+		}
+	}
+	if(flags & COLOR) {
+		Color4b &d = qcolors[target];
+		if(last >= 0)
+			d -= qcolors[last];
+		for(int k = 0; k < 4; k++)
+			encodeDiff(dcolors[k], bitstream, d[k]);
+	}
 
+	if(flags & UV) {
+		Point2i dt = qtexcoords[target] - texpredicted; //this is the estimated point
 
 		int tdiff = 0;
 		for(int k = 0; k < 2; k++) {
@@ -808,28 +1069,27 @@ void NxzEncoder::encodeVertex(int target, const Point3i &predicted, const Point2
 			if(n > tdiff)
 				tdiff = n;
 			if(tdiff >= 22) {
-				cerr << "Target: " << target << " size: " << qtexcoords.size() << endl;
-				cerr << "Texture precision required cannot be bigger than 2^-21. \n"
-					<< "tex: " << qtexcoords[target][0] << " " << qtexcoords[target][1] << "\n"
-					<< "predicted: " << texpredicted[0] << " " << texpredicted[1] << "\n"
-					<< "dt: " << dt[0] << " " << dt[1] << endl;
-				cerr << "Tex q: " << uv_q << " tex bits " << uv_bits << endl;
+				cerr << "Texture precision required cannot be bigger than 2^-21. \n";
 			}
 		}
-
-		assert(tdiff > 0);
 		for(int k = 0; k < 2; k++)
 			dt[k] += 1<<(tdiff-1);
 
-		//int diff = 1+std::max(ilog2(d[0]), std::max(ilog2(d[1]), ilog2(d[2])));
-
-		tdiffs.push_back(tdiff);
+		duvs.push_back(tdiff);
 		bitstream.write(dt[0], tdiff);
 		bitstream.write(dt[1], tdiff);
 	}
+
+	for(int k = 0; k < qdatas.size(); k++) {
+		auto &qdata = qdatas[k];
+		int d = qdata[target];
+		if(last >= 0)
+			d -= qdata[last];
+		encodeDiff(ddatas[k], bitstream, d);
+	}
 }
 
-//val cam be zero.
+//val can be zero.
 void NxzEncoder::encodeDiff(vector<uchar> &diffs, BitStream &stream, int val) {
 	val = Tunstall::toUint(val)+1;
 	int ret = ilog2(val);
@@ -837,3 +1097,4 @@ void NxzEncoder::encodeDiff(vector<uchar> &diffs, BitStream &stream, int val) {
 	if(ret > 0)
 		stream.write(val, ret);
 }
+

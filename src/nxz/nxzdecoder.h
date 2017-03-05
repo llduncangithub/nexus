@@ -15,27 +15,24 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License (http://www.gnu.org/licenses/gpl.txt)
 for more details.
 */
-#ifndef NXZ_DECODER_H
+#ifdef NXZ_DECODER_H
 #define NXZ_DECODER_H
 
 #include <vector>
 #include <algorithm>
 
-#include "../nxszip/cstream.h"
-#include "../nxszip/tunstall.h"
+#include "cstream.h"
+#include "tunstall.h"
 #include "../nxszip/fpu_precision.h"
-#include "../nxszip/zpoint.h"
-#include "../common/nexusdata.h"
+#include "zpoint.h"
 
 
 class DEdge2 { //decompression edges
 public:
-	uint16_t v0;
-	uint16_t v1;
-	uint16_t v2; //needed for parallelogram prediction
+	uint32_t v0, v1, v2; //used for parallelogram prediction
 	uint32_t prev, next;
 	bool deleted;
-	DEdge2(uint16_t a = 0, uint16_t b = 0, uint16_t c = 0, uint32_t p = 0, uint32_t n = 0):
+	DEdge2(uint32_t a = 0, uint32_t b = 0, uint32_t c = 0, uint32_t p = 0, uint32_t n = 0):
 		v0(a), v1(b), v2(c), prev(p), next(n), deleted(false) {}
 };
 

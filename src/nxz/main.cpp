@@ -1,4 +1,4 @@
-#include "nxzencoder.h"
+//#include "nxzencoder.h"
 
 #include<vcg/complex/complex.h>
 #include<wrap/io_trimesh/import_off.h>
@@ -49,8 +49,8 @@ int main(int argc, char *argv[]) {
 	tri::UpdateNormal<CoordMesh>::PerVertexNormalized(mesh);
 
 	//create the buffers
-	vector<Point3f> coords;
-	vector<Point3f> normals;
+	vector<vcg::Point3f> coords;
+	vector<vcg::Point3f> normals;
 	vector<unsigned int> index;
 
 	for(auto &v: mesh.vert)

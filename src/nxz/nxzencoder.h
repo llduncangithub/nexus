@@ -20,19 +20,22 @@ for more details.
 
 #include <vector>
 
-#include <vcg/space/color4.h>
-#include <vcg/space/point3.h>
-#include <vcg/space/point2.h>
+#include <limits.h>
+#include <float.h>
+//#include "point.h"
 
-#include "../nxszip/cstream.h"
-#include "../nxszip/zpoint.h"
+#include "cstream.h"
+#include "zpoint.h"
 
 namespace nx {
 
 class NxzEncoder {
 public:
+	enum Attributes { INDEX = 0, COORD, NORMAL, COLOR, UV, DATA };
 	enum Clers { VERTEX = 0, LEFT = 1, RIGHT = 2, END = 3, BOUNDARY = 4, DELAY = 5 };
 
+	uint32_t flags; //keeps track of what is inside
+	uint32_t nvert, nface;
 
 	CStream stream;
 	//compression stats
@@ -40,94 +43,94 @@ public:
 	int normal_size;
 	int color_size;
 	int face_size;
-
-	NxzEncoder(uint32_t _nvert, uint32_t _nface):
-		nvert(_nvert), nface(_nface),
-		coord_q(0), uv_q(0), coord_bits(12), uv_bits(12), norm_bits(10),
-		coord_size(0), normal_size(0), color_size(0), face_size(0),
-		coords(NULL), normals(NULL), uv(NULL), colors(NULL) {
-		color_bits[0] = color_bits[1] = color_bits[2] = color_bits[3] = 6;
-		for(int i = 0; i < 8; i++) data[i] = NULL;
-	}
-	void addCoords(float *buffer, float q = 0, vcg::Point3f o = vcg::Point3f(0, 0, 0)) {
-		coords = (vcg::Point3f *)buffer;
-		coord_q = q;
-		offset = o;
-	}
-
-	void addNormals(float *buffer, int bits) {
-		normals = (vcg::Point3f *)buffer;
-		norm_bits = bits;
-	}
-
-	void addNormals(int16_t *buffer, int bits) {
-		normals16 = (vcg::Point2s *)buffer;
-		norm_bits = bits;
-	}
-
-	void addColors(unsigned char *buffer, int lumabits, int chromabits, int alphabits) {
-		colors = (vcg::Color4b *)buffer;
-		color_bits[0] = lumabits;
-		color_bits[1] = color_bits[2] = chromabits;
-		color_bits[3] = alphabits;
-	}
-	void addUV(float *buffer, float q =  0) {
-		uv = (vcg::Point2f *)buffer;
-		uv_q = q;
-	}
-
-	void addData(float *buffer, float q) {
-		data[0] = buffer;
-		data_q[0] = q;
-	}
-
-	void encode();
-
-private:
-	int nvert, nface;
-	int coord_q; //coordinates quantization.
-	vcg::Point3f offset;
-	int uv_q;    //texture quantization
-	int data_q[8];
+	int uv_size;
+	std::vector<int> data_size;
 
 	int coord_bits;    //number of bits for coordinates.
 	int uv_bits;       //bumber of bits for texture coordinates
 	int norm_bits;     //normal bits
 	int color_bits[4]; //color bits
+	std::vector<int> data_bits;
+	int index_bits;
 
-	vcg::Point3f *coords, *normals;
-	vcg::Point2f *uv;
-	vcg::Point2s *normals16;
-	vcg::Color4b *colors;
-	float *data[8];
 
-	std::vector<vcg::Point3i> qpoints;
-	std::vector<vcg::Point2i> qtexcoords;
+	NxzEncoder(uint32_t _nvert, uint32_t _nface = 0);
+	void addCoords(float *buffer, float q = 0, Point3f o = Point3f(FLT_MAX));
+	void addCoords(float *buffer, uint32_t *index, float q = 0, Point3f o = Point3f(FLT_MAX));
+	void addCoords(float *buffer, uint16_t *index, float q = 0, Point3f o = Point3f(FLT_MAX));
+	//you do the quantization step
+	void addCoords(int *buffer);
+	void addCoords(int *buffer, uint32_t *index);
+	void addCoords(int *buffer, uint16_t *index);
+
+	void addNormals(float *buffer, int bits);
+	void addNormals(int16_t *buffer, int bits);
+
+	void addColors(unsigned char *buffer, int lumabits = 6, int chromabits = 6, int alphabits = 5);
+
+	void addUV(float *buffer, float q = 0);
+	void addUV(int *buffer, float q = 0);
+
+	void addData(float *buffer, float q, float offset = 0);
+	void addData(int *buffer);
+
+	void addGroup(int end_triangle) { groups.push_back(end_triangle); }
+
+	void encode();
+
+private:
+
+	Point3i coord_o;
+	Point2i uv_o;
+	std::vector<float> data_o;
+
+	float coord_q;    //coordinates quantization.
+	float norm_q;     //expecting a power of 2.
+	float color_q[4]; //expecting a power of 2.
+	float uv_q;       //texture quantization
+	std::vector<float> data_q;
+
+	std::vector<Point3i> qcoords;
+	std::vector<Point2i> qtexcoords;
+	std::vector<Point3i> qnormals;
+	std::vector<Color4b> qcolors;
+	std::vector<Point2i> quvs;
+	std::vector<std::vector<int>> qdatas;
+
+	std::vector<uint32_t> index;
+	std::vector<uint32_t> groups;
+	vector<uchar> clers;
+
+	std::vector<uchar> dcoords;
+	std::vector<uchar> dnormals;
+	std::vector<uchar> dcolors[4];
+	std::vector<uchar> duvs;
+	std::vector<std::vector<uchar>> ddatas;
 
 	std::vector<ZPoint> zpoints; //used by point cloud only
-	std::vector<int> order; //not used for point cloud for mesh we store for each new vertex the original vertex index.
-	std::vector<int> reorder; //for each OLD vertex its new vertex
+	std::vector<int> order;      //for mesh we store for each new vertex the original vertex index.
 
-	std::vector<int> last; //used with order to make diffs in colors (refers to the original indexes too.
+	std::vector<int> last;       //used with order to make diffs in colors (refers to the original indexes too.
 	std::vector<bool> boundary;
-	std::vector<int> encoded; //encoded vertices, use index instead of diff for those.
+	std::vector<int> encoded;    //encoded vertices, use index instead of diff for those.
 
-	static vcg::Point3i quantize(vcg::Point3f &p, float side); //used in encode faces
-	void quantize(); //used for point clouds
-	void quantizeCoords();
-	void quantizeTexCoords();
+	void setCoordBits();
+	void setDataBits();
 
-	void encodeFaces();
-	void encodeCoordinates(); //used only for point clouds
+	void encodePointCloud(); //used only for point clouds
+	void encodeCoords();
 	void encodeNormals();
 	void encodeColors();
+	void encodeUvs();
+	void encodeDatas();
 
-	void encodeFaces(int start, int end);
+	void encodeMesh();
+	void encodeFaces(BitStream &bitstream, int start, int end);
 
-	void computeNormals(std::vector<vcg::Point3s> &estimated_normals);
+	void computeNormals(vector<Point3i> &estimated_normals);
 	void markBoundary();
 
-	void encodeVertex(int target, const vcg::Point3i &predicted, const vcg::Point2i &texpredicted, BitStream &bitstream, vector<uchar> &diffs, vector<uchar> &tdiffs);
+	void encodeVertex(int target, const Point3i &predicted, const Point2i &texpredicted, BitStream &bitstream, int last);
 	void encodeDiff(std::vector<uchar> &diffs, BitStream &stream, int val);
 };
 
