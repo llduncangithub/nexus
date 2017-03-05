@@ -15,7 +15,7 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License (http://www.gnu.org/licenses/gpl.txt)
 for more details.
 */
-#ifdef NXZ_DECODER_H
+#ifndef NXZ_DECODER_H
 #define NXZ_DECODER_H
 
 #include <vector>
@@ -27,44 +27,37 @@ for more details.
 #include "zpoint.h"
 
 
-class DEdge2 { //decompression edges
-public:
-	uint32_t v0, v1, v2; //used for parallelogram prediction
-	uint32_t prev, next;
-	bool deleted;
-	DEdge2(uint32_t a = 0, uint32_t b = 0, uint32_t c = 0, uint32_t p = 0, uint32_t n = 0):
-		v0(a), v1(b), v2(c), prev(p), next(n), deleted(false) {}
-};
+namespace nx {
 
 class NxzDecoder {
 public:
+	enum Attributes { INDEX = 0, COORD = 1, NORMAL = 2, COLOR = 4, UV = 8, DATA = 16 };
 	enum Clers { VERTEX = 0, LEFT = 1, RIGHT = 2, END = 3, BOUNDARY = 4, DELAY = 5 };
-	float error; //quadric error on internal vertices, 0 on boundary vertices
-	int coord_q; //global power of 2 quantization.
-	int norm_q;  //normal bits
-	int color_q[4]; //color bits
-	int uv_q;   //texture bits
+
+	template <typename S> struct Attribute {
+		float q; //quantization
+		S o;     //origin
+		int bits;
+		uint32_t size; //for stats
+		Attribute(): q(0.0f), bits(0) {}
+		Attribute(float _q, S _o, int _b): q(_q), o(_o), bits(_b), size(0) {}
+	};
+
+
+	Attribute<Point3i> coord;
+	Attribute<Point3i> norm;
+	Attribute<int> color[4];
+	Attribute<Point2i> uv;
+	std::vector<Attribute<int>> data;
+	Attribute<int> face;
 
 	CStream stream;
 
-	NxzDecoder(nx::Node &_node, nx::NodeData &_data, nx::Patch *_patches, nx::Signature &_sig):
-		node(_node), data(_data), patches(_patches), sig(_sig), vertex_count(0) {}
+	NxzDecoder(): vertex_count(0) {}
 
 	void decode(int len, uchar *input);
 
 private:
-
-	nx::Node &node;
-	nx::NodeData &data;
-	nx::Patch *patches;
-	nx::Signature sig;
-
-	vcg::Point3i min, max; //minimum position of vertices
-	vcg::Point3i tmin, tmax; //minimum position of texcoords
-
-	int coord_bits; //number of bits for coordinates.
-	int uv_bits;  //number of bits for textures
-
 	std::vector<bool> boundary;
 	std::vector<int> last;
 
@@ -88,4 +81,5 @@ private:
 	int vertex_count; //keep tracks of current decoding vertex
 };
 
+} //namespace
 #endif // NXZ_DECODER_H

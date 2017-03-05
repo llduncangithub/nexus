@@ -15,7 +15,8 @@ SOURCES += main.cpp \
     nxzdecoder.cpp \
     nxzencoder.cpp \
     tunstall.cpp \
-    bitstream.cpp
+    bitstream.cpp \
+    ../../../vcglib/wrap/ply/plylib.cpp
 HEADERS += \
     nxzdecoder.h \
     nxzencoder.h \
@@ -23,7 +24,8 @@ HEADERS += \
     zpoint.h \
     cstream.h \
     tunstall.h \
-    bitstream.h
+    bitstream.h \
+    ../../../vcglib/wrap/ply/plylib.h
 
 DISTFILES += \
     plan.md

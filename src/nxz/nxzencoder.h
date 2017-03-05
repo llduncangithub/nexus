@@ -31,14 +31,41 @@ namespace nx {
 
 class NxzEncoder {
 public:
-	enum Attributes { INDEX = 0, COORD, NORMAL, COLOR, UV, DATA };
+	enum Attributes { INDEX = 0, COORD = 1, NORMAL = 2, COLOR = 4, UV = 8, DATA = 16 };
 	enum Clers { VERTEX = 0, LEFT = 1, RIGHT = 2, END = 3, BOUNDARY = 4, DELAY = 5 };
+
+
+	template <typename S> struct Attribute {
+		float q; //quantization
+		S o;     //origin
+		int bits;
+		uint32_t size; //for stats
+		Attribute(): q(0.0f), bits(0) {}
+		Attribute(float _q, S _o, int _b): q(_q), o(_o), bits(_b), size(0) {}
+	};
 
 	uint32_t flags; //keeps track of what is inside
 	uint32_t nvert, nface;
 
 	CStream stream;
-	//compression stats
+
+	template <typename S> struct Attribute {
+		float q; //quantization
+		S o;     //origin
+		int bits;
+		uint32_t size; //for stats
+		Attribute(): q(0.0f), bits(0) {}
+		Attribute(float _q, S _o, int _b): q(_q), o(_o), bits(_b), size(0) {}
+	};
+
+	Attribute<Point3i> coord;
+	Attribute<Point3i> norm;
+	Attribute<int> color[4];
+	Attribute<Point2i> uv;
+	std::vector<Attribute<int>> data;
+	Attribute<int> face;
+
+/*	//compression stats
 	int coord_size;
 	int normal_size;
 	int color_size;
@@ -52,6 +79,16 @@ public:
 	int color_bits[4]; //color bits
 	std::vector<int> data_bits;
 	int index_bits;
+
+	Point3i coord_o;
+	Point2i uv_o;
+	std::vector<float> data_o;
+
+	float coord_q;    //coordinates quantization.
+	float norm_q;     //expecting a power of 2.
+	float color_q[4]; //expecting a power of 2.
+	float uv_q;       //texture quantization
+	std::vector<float> data_q; */
 
 
 	NxzEncoder(uint32_t _nvert, uint32_t _nface = 0);
@@ -80,16 +117,6 @@ public:
 
 private:
 
-	Point3i coord_o;
-	Point2i uv_o;
-	std::vector<float> data_o;
-
-	float coord_q;    //coordinates quantization.
-	float norm_q;     //expecting a power of 2.
-	float color_q[4]; //expecting a power of 2.
-	float uv_q;       //texture quantization
-	std::vector<float> data_q;
-
 	std::vector<Point3i> qcoords;
 	std::vector<Point2i> qtexcoords;
 	std::vector<Point3i> qnormals;
@@ -99,7 +126,7 @@ private:
 
 	std::vector<uint32_t> index;
 	std::vector<uint32_t> groups;
-	vector<uchar> clers;
+	std::vector<uchar> clers;
 
 	std::vector<uchar> dcoords;
 	std::vector<uchar> dnormals;
@@ -115,7 +142,7 @@ private:
 	std::vector<int> encoded;    //encoded vertices, use index instead of diff for those.
 
 	void setCoordBits();
-	void setDataBits();
+	void setDataBits(float q);
 
 	void encodePointCloud(); //used only for point clouds
 	void encodeCoords();
@@ -127,11 +154,11 @@ private:
 	void encodeMesh();
 	void encodeFaces(BitStream &bitstream, int start, int end);
 
-	void computeNormals(vector<Point3i> &estimated_normals);
+	void computeNormals(std::vector<Point3i> &estimated_normals);
 	void markBoundary();
 
 	void encodeVertex(int target, const Point3i &predicted, const Point2i &texpredicted, BitStream &bitstream, int last);
-	void encodeDiff(std::vector<uchar> &diffs, BitStream &stream, int val);
+	int encodeDiff(std::vector<uchar> &diffs, BitStream &stream, int val);
 };
 
 } //namespace

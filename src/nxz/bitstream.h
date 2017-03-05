@@ -21,6 +21,8 @@ for more details.
 #include <vector>
 #include <stdint.h>
 
+namespace nx {
+
 class BitStream {
 public:
 	BitStream(): size(0), buffer(0), allocated(0), pos(0), buff(0), bits(0) {}
@@ -47,31 +49,5 @@ private:
 	int bits;
 };
 
-class Obstream: public std::vector<uint64_t> {
-public:
-	Obstream();
-
-	void write(uint64_t bits, int n); //write last n bits
-	void flush();
-private:
-	uint64_t outbuff;
-	int bitsToGo;
-};
-
-
-class Ibstream {
-public:
-	Ibstream(int size, uint64_t *buffer);
-
-	void read(int n, uint64_t &bits);       // # of bits to read
-	void rewind();                   // rewind to beginning of input
-private:
-	int size;
-	uint64_t *buffer;                    // stream for reading bits
-	uint64_t *pos; //keep track of current position
-
-	uint64_t inbuff;                      // buffer bits for input
-	int inbbits;                     // used for buffering
-};
-
+}//namespace
 #endif // NX_BITSTREAM_H

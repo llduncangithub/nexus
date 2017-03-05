@@ -75,12 +75,14 @@ public:
 		memcpy(pos, b, s);
 		pos += s;
 	}
+
 	template<class T> void write(T c) { grow(sizeof(T)); *(T *)pos = c; pos += sizeof(T); }
 	//usually we know how long c is for some other reason
 	template<class T> void writeArray(int s, T*c) {
 		int bytes = s*sizeof(T);
 		push(c, bytes);
 	}
+
 	void write(BitStream &stream) {
 		//need to pad to 32bits
 		write<int>((int)stream.size);

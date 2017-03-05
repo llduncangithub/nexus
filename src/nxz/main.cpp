@@ -1,4 +1,4 @@
-//#include "nxzencoder.h"
+#include "nxzencoder.h"
 
 #include<vcg/complex/complex.h>
 #include<wrap/io_trimesh/import_off.h>
@@ -41,6 +41,10 @@ using namespace vcg;
 
 int main(int argc, char *argv[]) {
 
+	if(argc != 2) {
+		cerr << "Usage: " << argv[0] << " [file.ply]\n";
+		return 0;
+	}
 	CoordMesh mesh;
 	if(tri::io::ImporterPLY<CoordMesh>::Open(mesh, argv[1]) != 0) {
 		printf("Error reading file  %s\n",argv[1]);
@@ -55,6 +59,29 @@ int main(int argc, char *argv[]) {
 
 	for(auto &v: mesh.vert)
 		coords.push_back(v.P());
+
+	CoordMesh::VertexType *start = &*mesh.vert.begin();
+	for(auto &f: mesh.face) {
+//		cout << "F: " << f.V(0) - start << " " << f.V(1) - start << " " << f.V(2) - start << endl;
+		index.push_back(f.V(0) - start);
+		index.push_back(f.V(1) - start);
+		index.push_back(f.V(2) - start);
+	}
+
+	nx::NxzEncoder encoder(coords.size(), index.size()/3);
+	encoder.addCoords((float *)&*coords.begin(), &*index.begin());
+	encoder.encode();
+
+	cout << "Compressed to: " << encoder.stream.size() << endl;
+	cout << "Ratio: " << 100.0f*encoder.stream.size()/(coords.size()*12 + index.size()*12) << endl;
+	cout << "Bpv: " << 8.0f*encoder.stream.size()/coords.size() << endl << endl;
+
+	cout << "Coord bpv; " << (float)encoder.coord.size/coords.size() << endl;
+	cout << "Coord q: " << encoder.coord.q << endl;
+	cout << "Coord bits: " << encoder.coord.bits << endl << endl;
+
+	cout << "Face bpv; " << (float)encoder.face.size/coords.size() << endl;
+	cout << "Size: " << (encoder.coord.size/8 + encoder.face.size/8) << endl;
 
 	return 0;
 }

@@ -6,6 +6,8 @@
 
 typedef unsigned char uchar;
 
+namespace nx {
+
 template <typename S> class Point2 {
 private:
 	S v[2];
@@ -14,7 +16,6 @@ public:
 	Point2() {}
 	Point2(S x, S y) { v[0] = x; v[1] = y; }
 	Point2(S *x) { v[0] = x[0]; v[1] = x[1]; }
-
 	explicit Point2(S x) { v[0] = v[1] = x; }
 
 	S &operator[](int k) { return v[k]; }
@@ -181,4 +182,5 @@ public:
 	Color4b toRGB() { return Color4b(v[2] + v[0], v[0], v[1] + v[0], v[3]); }
 };
 
+} //namespace
 #endif // NX_POINT_H

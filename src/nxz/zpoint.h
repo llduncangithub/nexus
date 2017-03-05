@@ -21,6 +21,8 @@ for more details.
 #include <stdint.h>
 #include "point.h"
 
+namespace nx {
+
 class ZPoint {
 public:
 	uint64_t bits; //enough for 21 bit quantization.
@@ -118,11 +120,7 @@ public:
 		while ( p>>=1 ) { ++k; }
 		return k;
 	}
-	void debug() {
-		for(int i = 0; i < 64; i++)
-			if(testBit(i)) cout << '1';
-			else cout << '0';
-	}
 };
 
+}//namespace
 #endif // NX_ZPOINT_H

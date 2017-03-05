@@ -16,7 +16,6 @@ GNU General Public License (http://www.gnu.org/licenses/gpl.txt)
 for more details.
 */
 
-#if 0
 #include <algorithm>    // std::shuffle
 #include <array>        // std::array
 #include <random>       // std::default_random_engine
@@ -24,8 +23,16 @@ for more details.
 #include "nxzdecoder.h"
 
 using namespace std;
-using namespace vcg;
 using namespace nx;
+
+class DEdge2 { //decompression edges
+public:
+	uint32_t v0, v1, v2; //used for parallelogram prediction
+	uint32_t prev, next;
+	bool deleted;
+	DEdge2(uint32_t a = 0, uint32_t b = 0, uint32_t c = 0, uint32_t p = 0, uint32_t n = 0):
+		v0(a), v1(b), v2(c), prev(p), next(n), deleted(false) {}
+};
 
 void NxzDecoder::decode(int len, uchar *input) {
 	FpuPrecision::store();
@@ -577,5 +584,3 @@ int NxzDecoder::decodeDiff(uchar diff, BitStream &stream) {
 		val = -(val >> 1);
 	return val;
 }
-
-#endif

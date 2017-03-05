@@ -22,6 +22,7 @@ for more details.
 // allows a specific bit to be masked from a number
 #include <iostream>
 using namespace std;
+using namespace nx;
 // usage: bmask[k] has the rightmost k bits == 1, other bits 0
 //
 static uint64_t bmask[] = {
@@ -133,75 +134,4 @@ void BitStream::push_back(uint64_t w) {
 		allocated *= 2;
 	}
 	buffer[size++] = w;
-}
-
-
-
-
-
-
-
-
-
-
-Obstream::Obstream() {
-	outbuff = 0;                     // nothing in buffer
-	bitsToGo = BITS_PER_WORD;        // bits to go before buffer filled
-}
-
-//numbits < 64 and ignores higher bits in value
-void Obstream::write(uint64_t value, int numbits) {
-	value &= bmask[numbits];
-	while (numbits >= bitsToGo) {
-		outbuff = (outbuff << bitsToGo) | (value >> (numbits - bitsToGo));
-		push_back(outbuff);
-		value &= bmask[numbits - bitsToGo];
-		numbits -= bitsToGo;
-		bitsToGo = BITS_PER_WORD;
-		outbuff = 0;
-	}
-
-	if (numbits > 0) {
-		outbuff = (outbuff << numbits) | value;
-		bitsToGo -= numbits;
-	}
-}
-
-void Obstream::flush() {
-	if (bitsToGo != BITS_PER_WORD) {
-		push_back((outbuff << bitsToGo));
-		outbuff = 0;
-		bitsToGo = BITS_PER_WORD;
-	}
-}
-
-Ibstream::Ibstream(int _size, uint64_t *_buffer): size(_size), buffer(_buffer) {
-	pos = buffer;
-	inbuff = inbbits = 0;
-}
-
-//numbits < 64 and overwrites only last bits of retval
-void Ibstream::read(int numbits, uint64_t &retval) {
-	retval &= ~bmask[numbits];
-	uint64_t ret = 0;
-
-	while (numbits > inbbits){
-		ret |= inbuff << (numbits - inbbits);
-		numbits -= inbbits;
-		inbuff = *pos++;
-		inbbits = BITS_PER_WORD;
-	}
-
-	if (numbits > 0){
-		ret |= inbuff >> (inbbits - numbits);
-		inbuff &= bmask[inbbits - numbits];
-		inbbits -= numbits;
-	}
-	retval |= ret;
-}
-
-
-void Ibstream::rewind() {
-	pos = buffer;
-	inbuff = inbbits = 0;
 }

@@ -24,6 +24,7 @@ for more details.
 #include "tunstall.h"
 
 using namespace std;
+using namespace nx;
 
 struct TSymbol {
 	int offset;
@@ -181,7 +182,7 @@ void Tunstall::createDecodingTables() {
 	int pos = 0;
 	for(size_t i = 0; i < queues.size(); i++) {
 		deque<TSymbol> &queue = queues[i];
-		for(int k = 0; k < queue.size(); k++) {
+		for(size_t k = 0; k < queue.size(); k++) {
 			TSymbol &s = queue[k];
 			index[word] = pos;
 			lengths[word] = s.length;
@@ -209,7 +210,7 @@ void Tunstall::createEncodingTables() {
 
 	offsets.clear();
 	offsets.resize(lookup_table_size, 0xffffff); //this is enough for quite large tables.
-	for(int i = 0; i < index.size(); i++) {
+	for(size_t i = 0; i < index.size(); i++) {
 		int low, high;
 		int offset = 0;
 		int table_offset = 0;
@@ -328,7 +329,7 @@ int Tunstall::decompress(unsigned char *data, unsigned char *output, int output_
 
 float Tunstall::entropy() {
 	float e = 0;
-	for(int i = 0; i < probabilities.size(); i++) {
+	for(size_t i = 0; i < probabilities.size(); i++) {
 		float p = probabilities[i].probability/255.0f;
 		e += p*log(p)/log(2);
 	}

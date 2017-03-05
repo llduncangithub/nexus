@@ -22,9 +22,7 @@ for more details.
 #include <vector>
 
 
-using namespace std;
-
-
+namespace nx {
 
 /* SIMPLEST TUNSTALL encoding:
    1) build dictionary:
@@ -160,4 +158,5 @@ public:
 
 };*/
 
+}//namespace
 #endif // NX_TUNSTALL_H

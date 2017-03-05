@@ -23,17 +23,19 @@ for more details.
 
 #include "bitstream.h"
 
-using namespace std;
-
 typedef unsigned char uchar;
+
+namespace nx {
+
 
 class CStream {
 public:
 	uchar *buffer;
 	uchar *pos; //for reading.
 	int allocated;
+	int stopwatch;
 
-	CStream(): buffer(NULL), pos(NULL), allocated(0) {}
+	CStream(): buffer(NULL), pos(NULL), allocated(0), stopwatch(0) {}
 	CStream(int reserved) {
 		reserve(reserved);
 	}
@@ -46,6 +48,7 @@ public:
 	}
 	void reserve(int reserved) {
 		allocated = reserved;
+		stopwatch = 0;
 		pos = buffer = new uchar[allocated];
 	}
 	void init(int /*_size*/, unsigned char *_buffer) {
@@ -55,6 +58,7 @@ public:
 	}
 	void rewind() { pos = buffer; }
 	int size() { return pos - buffer; }
+	int elapsed() { int e = size() - stopwatch; stopwatch = size(); return e; }
 	void grow(int s) {
 		int size = pos - buffer;
 		if(size + s > allocated) { //needs more spac
@@ -121,4 +125,5 @@ public:
 
 };
 
+} //namespace
 #endif // NX_CSTREAM_H
