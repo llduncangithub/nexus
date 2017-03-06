@@ -68,16 +68,6 @@ public:
 		uint32_t y = morton3(bits>>1);
 		uint32_t z = morton3(bits>>2);
 
-		/*uint32_t x = 0;
-		uint32_t y = 0;
-		uint32_t z = 0;
-		uint64_t l = 1;
-		for(int i = 0; i < 22; i++) {
-			x |= (bits & (l<< (3*i))) >> (2*i);
-			y |= (bits & (l<< (3*i + 1))) >> (2*i+1);
-			z |= (bits & (l<< (3*i + 2))) >> (2*i+2);
-		} */
-
 		Point3f p((int)x + min[0], (int)y + min[1], (int)z + min[2]);
 		p *= step;
 		return p;

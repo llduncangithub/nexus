@@ -25,7 +25,8 @@ HEADERS += \
     cstream.h \
     tunstall.h \
     bitstream.h \
-    ../../../vcglib/wrap/ply/plylib.h
+    ../../../vcglib/wrap/ply/plylib.h \
+    nxz.h
 
 DISTFILES += \
     plan.md

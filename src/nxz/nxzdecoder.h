@@ -25,24 +25,15 @@ for more details.
 #include "tunstall.h"
 #include "../nxszip/fpu_precision.h"
 #include "zpoint.h"
+#include "nxz.h"
 
 
 namespace nx {
 
 class NxzDecoder {
 public:
-	enum Attributes { INDEX = 0, COORD = 1, NORMAL = 2, COLOR = 4, UV = 8, DATA = 16 };
-	enum Clers { VERTEX = 0, LEFT = 1, RIGHT = 2, END = 3, BOUNDARY = 4, DELAY = 5 };
-
-	template <typename S> struct Attribute {
-		float q; //quantization
-		S o;     //origin
-		int bits;
-		uint32_t size; //for stats
-		Attribute(): q(0.0f), bits(0) {}
-		Attribute(float _q, S _o, int _b): q(_q), o(_o), bits(_b), size(0) {}
-	};
-
+	uint32_t flags; //keeps track of what is inside
+	uint32_t nvert, nface;
 
 	Attribute<Point3i> coord;
 	Attribute<Point3i> norm;
@@ -51,13 +42,31 @@ public:
 	std::vector<Attribute<int>> data;
 	Attribute<int> face;
 
+	Entropy entropy;
+	Normals normals;
+
 	CStream stream;
 
-	NxzDecoder(): vertex_count(0) {}
+	void NxzDecoder(int len, uchar *input);
+	bool hasNormals() { return flags & NORMAL; }
+	bool hasColors() { return flags & COLOR; }
+	bool hasUvs() { return flags & UV; }
+	bool dataCount() { return data.size(); }
+	bool hasIndex() { return flags & INDEX; }
+	void setCoords(float *buffer);
+	void setNormals(float *buffer);
+	void setNormals(int16_t *buffer);
+	void setColors(uchar *buffer);
+	void setUvs(float *buffer);
+	void setData(int pos, float *buffer);
+	void setIndex(uint32_t *buffer);
+	void setIndex(int16_t *buffer);
 
-	void decode(int len, uchar *input);
+	void decode();
 
 private:
+	bool short_normals;
+	bool short_index;
 	std::vector<bool> boundary;
 	std::vector<int> last;
 
@@ -70,12 +79,16 @@ private:
 
 	void decodeFaces(int start, uint16_t *faces);
 	//TODO these are in common with MeshCoder, we should make a NxzEncoder class and move the common parts
-	void computeNormals(vcg::Point3s *estimated_normals);
+	void computeNormals(Point3i *estimated_normals);
 	void markBoundary();
 
-	int decodeDiff(uchar diff, BitStream &stream);
-	//we assume integer computations and float computations are equivalent for numbers < 1<<23
+
+	//we assume integer computations and float computations are equivalent for numbers < 1<<23 ? we shouldnt
 	int decodeVertex(const vcg::Point3i &predicted, const vcg::Point2i &texpredicted, BitStream &bitstream, int diff, int tdiff);
+
+	int decodeDiff(uchar diff, BitStream &stream);
+	void decodeDiff(uchar diff, BitStream &stream, Point3i &p);
+	void decodeDiff(uchar diff, BitStream &stream, Point2i &p);
 
 	void dequantize();
 	int vertex_count; //keep tracks of current decoding vertex

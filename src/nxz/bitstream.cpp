@@ -97,6 +97,23 @@ void BitStream::write(uint64_t value, int numbits) {
 	}
 }
 
+uint32_t BitStream::readUint(int numbits) {
+	assert(numbits > 0);
+	uint64_t ret = 0;
+
+	if (numbits > bits){
+		ret |= buff << (numbits - bits);
+		numbits -= bits;
+		buff = *pos++;
+		bits = BITS_PER_WORD;
+	}
+
+	ret |= buff >> (bits - numbits);
+	buff &= bmask[bits - numbits]; //TODO! not needed!
+	bits -= numbits;
+	return ret;
+}
+
 void BitStream::read(int numbits, uint64_t &retval) {
 	assert(!allocated);
 	retval &= ~bmask[numbits];
@@ -111,7 +128,7 @@ void BitStream::read(int numbits, uint64_t &retval) {
 
 	if (numbits > 0){
 		ret |= buff >> (bits - numbits);
-		buff &= bmask[bits - numbits];
+		buff &= bmask[bits - numbits]; //TODO! not needed!
 		bits -= numbits;
 	}
 	retval |= ret;

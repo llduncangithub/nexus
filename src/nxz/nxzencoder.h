@@ -22,86 +22,41 @@ for more details.
 
 #include <limits.h>
 #include <float.h>
-//#include "point.h"
 
 #include "cstream.h"
 #include "zpoint.h"
+#include "nxz.h"
 
 namespace nx {
 
 class NxzEncoder {
 public:
-	enum Attributes { INDEX = 0, COORD = 1, NORMAL = 2, COLOR = 4, UV = 8, DATA = 16 };
-	enum Clers { VERTEX = 0, LEFT = 1, RIGHT = 2, END = 3, BOUNDARY = 4, DELAY = 5 };
-
-
-	template <typename S> struct Attribute {
-		float q; //quantization
-		S o;     //origin
-		int bits;
-		uint32_t size; //for stats
-		Attribute(): q(0.0f), bits(0) {}
-		Attribute(float _q, S _o, int _b): q(_q), o(_o), bits(_b), size(0) {}
-	};
-
 	uint32_t flags; //keeps track of what is inside
 	uint32_t nvert, nface;
 
-	CStream stream;
-
-	template <typename S> struct Attribute {
-		float q; //quantization
-		S o;     //origin
-		int bits;
-		uint32_t size; //for stats
-		Attribute(): q(0.0f), bits(0) {}
-		Attribute(float _q, S _o, int _b): q(_q), o(_o), bits(_b), size(0) {}
-	};
-
 	Attribute<Point3i> coord;
 	Attribute<Point3i> norm;
-	Attribute<int> color[4];
+	Attribute<unsigned char> color[4];
 	Attribute<Point2i> uv;
 	std::vector<Attribute<int>> data;
 	Attribute<int> face;
+	int header_size;
 
-/*	//compression stats
-	int coord_size;
-	int normal_size;
-	int color_size;
-	int face_size;
-	int uv_size;
-	std::vector<int> data_size;
+	Entropy entropy;
+	Normals normals;
 
-	int coord_bits;    //number of bits for coordinates.
-	int uv_bits;       //bumber of bits for texture coordinates
-	int norm_bits;     //normal bits
-	int color_bits[4]; //color bits
-	std::vector<int> data_bits;
-	int index_bits;
+	CStream stream;
 
-	Point3i coord_o;
-	Point2i uv_o;
-	std::vector<float> data_o;
-
-	float coord_q;    //coordinates quantization.
-	float norm_q;     //expecting a power of 2.
-	float color_q[4]; //expecting a power of 2.
-	float uv_q;       //texture quantization
-	std::vector<float> data_q; */
-
-
-	NxzEncoder(uint32_t _nvert, uint32_t _nface = 0);
+	NxzEncoder(uint32_t _nvert, uint32_t _nface = 0, Entropy en = TUNSTALL);
 	void addCoords(float *buffer, float q = 0, Point3f o = Point3f(FLT_MAX));
 	void addCoords(float *buffer, uint32_t *index, float q = 0, Point3f o = Point3f(FLT_MAX));
 	void addCoords(float *buffer, uint16_t *index, float q = 0, Point3f o = Point3f(FLT_MAX));
-	//you do the quantization step
 	void addCoords(int *buffer);
 	void addCoords(int *buffer, uint32_t *index);
 	void addCoords(int *buffer, uint16_t *index);
 
-	void addNormals(float *buffer, int bits);
-	void addNormals(int16_t *buffer, int bits);
+	void addNormals(float *buffer, int bits, Normals no = ESTIMATED);
+	void addNormals(int16_t *buffer, int bits, Normals no = ESTIMATED);
 
 	void addColors(unsigned char *buffer, int lumabits = 6, int chromabits = 6, int alphabits = 5);
 
@@ -116,49 +71,36 @@ public:
 	void encode();
 
 private:
-
-	std::vector<Point3i> qcoords;
-	std::vector<Point2i> qtexcoords;
-	std::vector<Point3i> qnormals;
-	std::vector<Color4b> qcolors;
-	std::vector<Point2i> quvs;
-	std::vector<std::vector<int>> qdatas;
-
-	std::vector<uint32_t> index;
 	std::vector<uint32_t> groups;
 	std::vector<uchar> clers;
+	int current_vertex;
 
-	std::vector<uchar> dcoords;
-	std::vector<uchar> dnormals;
-	std::vector<uchar> dcolors[4];
-	std::vector<uchar> duvs;
-	std::vector<std::vector<uchar>> ddatas;
-
-	std::vector<ZPoint> zpoints; //used by point cloud only
-	std::vector<int> order;      //for mesh we store for each new vertex the original vertex index.
-
-	std::vector<int> last;       //used with order to make diffs in colors (refers to the original indexes too.
 	std::vector<bool> boundary;
-	std::vector<int> encoded;    //encoded vertices, use index instead of diff for those.
+	std::vector<int> encoded;    //encoded vertex number
 
 	void setCoordBits();
-	void setDataBits(float q);
+	void setDataBits();
 
-	void encodePointCloud(); //used only for point clouds
+	void encodePointCloud();
+	void encodeZPoints(std::vector<ZPoint> &zpoints);
+
+	void encodeMesh();
+	void encodeFaces(BitStream &bitstream, int start, int end);
+
 	void encodeCoords();
 	void encodeNormals();
 	void encodeColors();
 	void encodeUvs();
 	void encodeDatas();
 
-	void encodeMesh();
-	void encodeFaces(BitStream &bitstream, int start, int end);
-
 	void computeNormals(std::vector<Point3i> &estimated_normals);
 	void markBoundary();
 
 	void encodeVertex(int target, const Point3i &predicted, const Point2i &texpredicted, BitStream &bitstream, int last);
-	int encodeDiff(std::vector<uchar> &diffs, BitStream &stream, int val);
+
+	void encodeDiff(std::vector<uchar> &diffs, BitStream &stream, int val);
+	void encodeDiff(std::vector<uchar> &diffs, BitStream &stream, const Point2i &val);
+	void encodeDiff(std::vector<uchar> &diffs, BitStream &stream, const Point3i &val);
 };
 
 } //namespace

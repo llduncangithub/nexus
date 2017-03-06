@@ -100,19 +100,20 @@ public:
 		push(stream.buffer, stream.size*sizeof(uint64_t));
 	}
 
-
 	template<class T> T read() {
 		T c;
 		c = *(T *)pos;
 		pos += sizeof(T);
 		return c;
 	}
+
 	template<class T> T *readArray(int s) {
 		int bytes = s*sizeof(T);
 		T *buffer = (T *)pos;
 		pos += bytes;
 		return buffer;
 	}
+
 	void read(BitStream &stream) {
 		int s = read<int>();
 		int pad = (pos - buffer) & 0x3;
@@ -121,8 +122,6 @@ public:
 		stream.init(s, (uint64_t *)pos);
 		pos += s*sizeof(uint64_t);
 	}
-
-
 };
 
 } //namespace
