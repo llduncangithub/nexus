@@ -35,7 +35,7 @@ public:
 	uint32_t nvert, nface;
 
 	Attribute<Point3i> coord;
-	Attribute<Point3i> norm;
+	Attribute<Point2i> norm;
 	Attribute<unsigned char> color[4];
 	Attribute<Point2i> uv;
 	std::vector<Attribute<int>> data;
@@ -93,7 +93,7 @@ private:
 	void encodeUvs();
 	void encodeDatas();
 
-	void computeNormals(std::vector<Point3i> &estimated_normals);
+	void computeNormals(std::vector<Point2i> &estimated_normals);
 	void markBoundary();
 
 	void encodeVertex(int target, const Point3i &predicted, const Point2i &texpredicted, BitStream &bitstream, int last);

@@ -38,7 +38,7 @@ static int ilog2(uint64_t p) {
 NxzEncoder::NxzEncoder(uint32_t _nvert, uint32_t _nface, Entropy en):
 	flags(0), nvert(_nvert), nface(_nface),
 	coord(0.0f, Point3i(0)),
-	norm(0.0f, Point3i(0)),
+	norm(0.0f, Point2i(0)),
 	uv(0.0f, Point2i(0)),
 	header_size(0), current_vertex(0), entropy(en), normals(ESTIMATED) {
 	/*	coord_o(2147483647), uv_o(2147483647), coord_q(0), uv_q(0), coord_bits(12), uv_bits(12), norm_bits(10),
@@ -167,15 +167,11 @@ void NxzEncoder::addNormals(float *buffer, int bits, Normals no) {
 	flags |= NORMAL;
 	norm.values.resize(nvert);
 	norm.diffs.resize(nvert);
-	norm.q = pow(2, -bits+1);
+	norm.q = pow(2, bits-1);
 
 	Point3f *normals = (Point3f *)buffer;
-	for(uint32_t i = 0; i < nvert; i++) {
-		Point3i &qn = norm.values[i];
-		Point3f &n = normals[i];
-		for(int k = 0; k < 3; k++)
-			qn[k] = (int)std::round(n[k]/norm.q);
-	}
+	for(uint32_t i = 0; i < nvert; i++)
+		norm.values[i] = encodeNormal(normals[i], norm.q);
 }
 
 void NxzEncoder::addNormals(int16_t *buffer, int bits, Normals no) {
@@ -184,7 +180,7 @@ void NxzEncoder::addNormals(int16_t *buffer, int bits, Normals no) {
 	vector<float> tmp(nvert*3);
 	for(uint32_t i = 0; i < nvert*3; i++)
 		tmp[i] = buffer[i]/32767.0f;
-	addNormals(&*tmp.begin(), bits);
+	addNormals(&*tmp.begin(), bits, no);
 }
 
 /* COLORS */
@@ -329,10 +325,9 @@ void NxzEncoder::encodePointCloud() {
 	//reorder attributes, compute differences end encode
 	if(flags & NORMAL) {
 		norm.diffs[0] = norm.values[zpoints[0].pos];
-		for(uint32_t i = 1; i < nvert; i++) {
+		for(uint32_t i = 1; i < nvert; i++)
 			norm.diffs[i] = norm.values[zpoints[i].pos] - norm.values[zpoints[i-1].pos];
-			norm.diffs[i][2] = norm.values[zpoints[i].pos][2]*norm.values[zpoints[i-1].pos][2];
-		}
+
 		encodeNormals();
 	}
 
@@ -400,17 +395,9 @@ void NxzEncoder::encodeNormals() {
 	//TOO: VS using Point2i diff
 	for(uint32_t i = 0; i < nvert; i++)
 		if(normals != BORDER || boundary[i])
-			encodeDiff(diffs, bitstream, Point2i(norm.diffs[i][0], norm.diffs[i][1]));
-
-
-	signs.resize(nvert);
-	for(uint32_t i = 0; i < nvert; i++)
-		if(normals != BORDER || boundary[i])
-			signs[i] = (norm.diffs[i][2] > 0);
+			encodeDiff(diffs, bitstream, norm.diffs[i]);
 
 	Tunstall::compress(stream, &*diffs.begin(), diffs.size());
-	//TODO worth compressing?
-	Tunstall::compress(stream, &*signs.begin(), signs.size());
 	stream.write(bitstream);
 
 	norm.size = stream.elapsed();
@@ -504,13 +491,8 @@ void NxzEncoder::encodeMesh() {
 		computeNormals(norm.diffs);
 		if(normals == BORDER)
 			markBoundary(); //mark boundary points on original vertices.
-
-		//store differences in values, will be reordered to diffs in encodeVertex
-		for(uint32_t i = 0; i < nvert; i++) {
-			norm.values[i][0] = norm.values[i][0] - norm.diffs[i][0];
-			norm.values[i][1] = norm.values[i][1] - norm.diffs[i][1];
-			norm.values[i][2] = (norm.values[i][2]*norm.diffs[i][2] > 0)? 1: 0;
-		}
+		for(uint32_t i = 0; i < nvert; i++)
+			norm.values[i] -= norm.diffs[i];
 	}
 
 
@@ -560,24 +542,25 @@ void NxzEncoder::markBoundary() {
 }
 
 
-void NxzEncoder::computeNormals(vector<Point3i> &estimated) {
-	estimated.resize(nvert, Point3i(0, 0, 0));
-
+void NxzEncoder::computeNormals(vector<Point2i> &estimated) {
+	vector<Point3f> tmp(nvert, Point3f(0, 0, 0));
+	estimated.resize(nvert);
 	for(uint32_t i = 0; i < nface; i++) {
 		int *f = &face.values[i*3];
 		Point3i &p0 = coord.values[f[0]];
 		Point3i &p1 = coord.values[f[1]];
 		Point3i &p2 = coord.values[f[2]];
-		Point3i n = (( p1 - p0) ^ (p2 - p0));
-		estimated[f[0]] += n;
-		estimated[f[1]] += n;
-		estimated[f[2]] += n;
+		Point3i qn = (( p1 - p0) ^ (p2 - p0));
+		Point3f n(qn[0], qn[1], qn[2]);
+		tmp[f[0]] += n;
+		tmp[f[1]] += n;
+		tmp[f[2]] += n;
 	}
 	//normalize
-	for(Point3i &n: estimated) {
-		float normal = sqrt(float((float)n[0]*n[0] + (float)n[1]*n[1] + (float)n[2]*n[2]));
-		for(int k = 0; k < 2; k++)
-			n[k] = (int)std::round((n[k]/normal)/norm.q);
+	for(uint32_t i = 0; i < nvert; i++) {
+		Point3f &n = tmp[i];
+		n /= n.norm();
+		estimated[i] = encodeNormal(n, norm.q);
 	}
 }
 
@@ -882,14 +865,15 @@ void NxzEncoder::encodeVertex(int target, const Point3i &predicted, const Point2
 	coord.diffs[current_vertex] = coord.values[target] - predicted;
 
 	if((flags & NORMAL)) {
-		Point3i &dt = norm.diffs[target];
+		Point2i &dt = norm.diffs[target];
 		dt = norm.values[target];
 		if(normals == DIFF) {
 			if(last >= 0)
 				dt -= norm.values[last];
-			dt[2] = 0;
-			if(last >= 0)
-				dt[2] = (norm.values[target][2] * norm.values[last][2] < 0);
+			if(dt[0] < -coord.q) dt[0] += coord.q;
+			else if(dt[0] > +coord.q) dt[0] -= coord.q;
+			if(dt[1] < -coord.q) dt[1] += coord.q;
+			else if(dt[1] > +coord.q) dt[1] -= coord.q;
 		}
 	}
 
@@ -908,6 +892,36 @@ void NxzEncoder::encodeVertex(int target, const Point3i &predicted, const Point2
 
 	encoded[target] = current_vertex++;
 }
+
+
+/*
+0 -> 0
+-1, 1 -> 1, [0,1]
+-2, 2
+-3, 3 -> 2 [0, 3]   (1<<2) max;
+
+-4, 4
+
+
+-7 7     3 [0,7] if(val>>1 < (1<<(diff-1)) val = -(1<<diff) + 1 + val;
+
+var middle = (1<<(diff-1));
+if(val < middle) val = -val -middle;
+
+//encode:
+0 - > 0
+
+-4   4
+-7   7;
+
+if(d == 0) d = 0;
+if(d < 0) n = -d; else n = d;
+diff = ilog2(n)
+var middle = 1<<(diff-1);
+if(d < 0)
+	d = middle + val;
+
+*/
 
 //val can be zero.
 void NxzEncoder::encodeDiff(vector<uchar> &diffs, BitStream &stream, int val) {

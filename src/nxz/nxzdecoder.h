@@ -47,7 +47,7 @@ public:
 
 	CStream stream;
 
-	void NxzDecoder(int len, uchar *input);
+	NxzDecoder(int len, uchar *input);
 	bool hasNormals() { return flags & NORMAL; }
 	bool hasColors() { return flags & COLOR; }
 	bool hasUvs() { return flags & UV; }
@@ -69,6 +69,8 @@ private:
 	bool short_index;
 	std::vector<bool> boundary;
 	std::vector<int> last;
+	std::vector<uint32_t> groups;
+	std::vector<uchar> clers;
 
 	void decodeFaces();
 	void decodeCoordinates();
@@ -79,12 +81,14 @@ private:
 
 	void decodeFaces(int start, uint16_t *faces);
 	//TODO these are in common with MeshCoder, we should make a NxzEncoder class and move the common parts
-	void computeNormals(Point3i *estimated_normals);
-	void markBoundary();
+	void computeNormals(Point3f *estimated);
+	void computeNormals(Point3s *estimated);
+
+	template <class F> void markBoundary();
 
 
 	//we assume integer computations and float computations are equivalent for numbers < 1<<23 ? we shouldnt
-	int decodeVertex(const vcg::Point3i &predicted, const vcg::Point2i &texpredicted, BitStream &bitstream, int diff, int tdiff);
+	int decodeVertex(const Point3i &predicted, const Point2i &texpredicted, BitStream &bitstream, int diff, int tdiff);
 
 	int decodeDiff(uchar diff, BitStream &stream);
 	void decodeDiff(uchar diff, BitStream &stream, Point3i &p);
@@ -93,6 +97,24 @@ private:
 	void dequantize();
 	int vertex_count; //keep tracks of current decoding vertex
 };
+
+template <class F> void NxzDecoder::markBoundary() {
+	boundary.resize(nvert, false);
+
+	vector<int> count(nvert, 0);
+	F *faces = (F *)face.buffer;
+	for(int i = 0; i < nface; i++) {
+		uint16_t *f = faces16 + i*3;
+		count[f[0]] += (int)f[1] - (int)f[2];
+		count[f[1]] += (int)f[2] - (int)f[0];
+		count[f[2]] += (int)f[0] - (int)f[1];
+	}
+	for(int i = 0; i < nvert; i++)
+		if(count[i] != 0)
+			boundary[i] = true;
+}
+
+
 
 } //namespace
 #endif // NXZ_DECODER_H
