@@ -1,4 +1,6 @@
 #include "nxzencoder.h"
+#include "nxzdecoder.h"
+
 
 #include<vcg/complex/complex.h>
 #include<wrap/io_trimesh/import_off.h>
@@ -55,6 +57,7 @@ int main(int argc, char *argv[]) {
 	encoder.addColors((unsigned char *)&*colors.begin());
 	encoder.encode();
 
+	cout << "Nvert: " << coords.size() << " Nface: " << index.size()/3 << endl;
 	cout << "Compressed to: " << encoder.stream.size() << endl;
 	cout << "Ratio: " << 100.0f*encoder.stream.size()/(coords.size()*12 + index.size()*12) << endl;
 	cout << "Bpv: " << 8.0f*encoder.stream.size()/coords.size() << endl << endl;
@@ -78,8 +81,8 @@ int main(int argc, char *argv[]) {
 
 
 	cout << "Face bpv; " << 8.0f*encoder.face.size/coords.size() << endl;
-	cout << "Size: " << (encoder.coord.size + encoder.face.size) << endl;
 
+	nx::NxzDecoder decoder(encoder.stream.size(), encoder.stream.buffer);
 	return 0;
 }
 

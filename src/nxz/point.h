@@ -172,6 +172,13 @@ public:
 		v[3] -= c[3];
 		return *this;
 	}
+	Point4 &operator+=(const Point4 &c) {
+		v[0] += c[0];
+		v[1] += c[1];
+		v[2] += c[2];
+		v[3] += c[3];
+		return *this;
+	}
 };
 
 class Color4b: public Point4<unsigned char> {
@@ -182,38 +189,6 @@ public:
 	Color4b toRGB() { return Color4b(v[2] + v[0], v[0], v[1] + v[0], v[3]); }
 };
 
-//encode between -unit and +unit;
-Point2i encodeNormal(Point3f v, int unit) {
-	Point2f p(v[0], v[1]);
-	p /= (abs(v[0]) + abs(v[1]) + abs(v[2]));
-
-	if(v[2] < 0) {
-		p = Point2f(1.0f - abs(p[1]), 1.0f - abs(p[0]));
-		if(v[0] < 0) p[0] = -p[0];
-		if(v[1] < 0) p[1] = -p[1];
-	}
-	return Point2i(p[0]*unit, p[1]*unit);
-}
-
-Point3f decodeNormal3i(Point2i v, int unit) {
-	Point3f n(v[0], v[1], unit - abs(v[0]) -abs(v[1]));
-	if (n[2] < 0) {
-		n[0] = ((v[0] > 0)? 1 : -1)*(unit - abs(v[1]));
-		n[1] = ((v[1] > 0)? 1 : -1)*(unit - abs(v[0]));
-	}
-	n /= n.norm();
-	return n;
-}
-
-Point3s decodeNormal3s(Point2s v, int unit) {
-	Point3f n(v[0], v[1], unit - abs(v[0]) -abs(v[1]));
-	if (n[2] < 0) {
-		n[0] = ((v[0] > 0)? 1 : -1)*(unit - abs(v[1]));
-		n[1] = ((v[1] > 0)? 1 : -1)*(unit - abs(v[0]));
-	}
-	n /= n.norm();
-	return Point3s(n[0]*32767, n[1]*32767, n[2]*32767);
-}
 
 } //namespace
 #endif // NX_POINT_H

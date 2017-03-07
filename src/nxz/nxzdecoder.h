@@ -43,7 +43,7 @@ public:
 	Attribute<int> face;
 
 	Entropy entropy;
-	Normals normals;
+	Normals normals_prediction;
 
 	CStream stream;
 
@@ -71,43 +71,51 @@ private:
 	std::vector<int> last;
 	std::vector<uint32_t> groups;
 	std::vector<uchar> clers;
+	int vertex_count; //keep tracks of current decoding vertex
 
-	void decodeFaces();
-	void decodeCoordinates();
+	void decodePointCloud();
+	void decodeMesh();
+	void decodeZPoints();
+	void decodeCoords();
 	void decodeNormals();
 	void decodeColors();
+	void decodeUvs();
+	void decodeDatas();
 
 	void shuffle(); //shuffle vertices for point clouds
 
-	void decodeFaces(int start, uint16_t *faces);
+	void decodeFaces(BitStream &stream, uint32_t start, uint32_t end, uint32_t &cler);
 	//TODO these are in common with MeshCoder, we should make a NxzEncoder class and move the common parts
 	void computeNormals(Point3f *estimated);
-	void computeNormals(Point3s *estimated);
+	void computeNormals(Point3s *normals3s);
 
 	template <class F> void markBoundary();
 
 
 	//we assume integer computations and float computations are equivalent for numbers < 1<<23 ? we shouldnt
-	int decodeVertex(const Point3i &predicted, const Point2i &texpredicted, BitStream &bitstream, int diff, int tdiff);
+	int decodeVertex(const Point3i &predicted, const Point2i &texpredicted, int last_index);
 
 	int decodeDiff(uchar diff, BitStream &stream);
 	void decodeDiff(uchar diff, BitStream &stream, Point3i &p);
+	void decodeDiff(uchar diff, BitStream &stream, Point3s &p);
 	void decodeDiff(uchar diff, BitStream &stream, Point2i &p);
+	Point2i encodeNormal(Point3f v, int unit);
+	Point3f decodeNormal3i(Point2i v, int unit);
+	Point3s decodeNormal3s(Point2s v, int unit);
 
 	void dequantize();
-	int vertex_count; //keep tracks of current decoding vertex
 };
 
 template <class F> void NxzDecoder::markBoundary() {
 	boundary.resize(nvert, false);
 
-	vector<int> count(nvert, 0);
-	F *faces = (F *)face.buffer;
+	std::vector<int> count(nvert, 0);
+	F *f = (F *)face.buffer;
 	for(int i = 0; i < nface; i++) {
-		uint16_t *f = faces16 + i*3;
 		count[f[0]] += (int)f[1] - (int)f[2];
 		count[f[1]] += (int)f[2] - (int)f[0];
 		count[f[2]] += (int)f[0] - (int)f[1];
+		f += 3;
 	}
 	for(int i = 0; i < nvert; i++)
 		if(count[i] != 0)

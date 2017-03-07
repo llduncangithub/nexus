@@ -15,6 +15,8 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License (http://www.gnu.org/licenses/gpl.txt)
 for more details.
 */
+#include <assert.h>
+
 #include <algorithm>    // std::shuffle
 #include <array>        // std::array
 #include <random>       // std::default_random_engine
@@ -36,7 +38,7 @@ public:
 };
 
 NxzDecoder::NxzDecoder(int len, uchar *input):
-	vertex_count(0), short_normals(false), short_index(false) {
+	short_normals(false), short_index(false), vertex_count(0) {
 
 	stream.init(len, input);
 
@@ -50,7 +52,7 @@ NxzDecoder::NxzDecoder(int len, uchar *input):
 	coord.o[2] = stream.read<int>();
 
 	if(flags & NORMAL) {
-		normals = (Normals)stream.read<uchar>();
+		normals_prediction = (Normals)stream.read<uchar>();
 		norm.q = stream.read<float>();
 	}
 
@@ -103,7 +105,7 @@ void NxzDecoder::decode() {
 
 }
 
-void NxzDecoder::decodePointClout() {
+void NxzDecoder::decodePointCloud() {
 	decodeZPoints();
 
 	if(flags & NORMAL)
@@ -154,7 +156,7 @@ void NxzDecoder::decodeCoords() {
 
 	Point3i *coords = (Point3i *)coord.buffer;
 	for(uint32_t i = 0; i < nvert; i++)
-		decodeDiff(diffs, bitstream, coords[i]);
+		decodeDiff(diffs[i], bitstream, coords[i]);
 }
 
 void NxzDecoder::decodeNormals() {
@@ -164,133 +166,76 @@ void NxzDecoder::decodeNormals() {
 	BitStream bitstream;
 	stream.read(bitstream);
 
-	for(uint32_t i = 0; i < nvert; i++)
-		if(normals != BORDER || boundary[i])
-			encodeDiff(diffs, bitstream, norm.diffs[i]);
-
-	Point3s *norms_s = (Point3s *)norm.buffer;
-	Point3i *norms_i = (Point3i *)norm.buffer;
-	for(uint32_t i = 0; i < nvert; i++) {
-		Point2i n;
-		decodeDiff(diffs, bitstream, n);
-		float x = n[0];
-		float y = n[1];
-		float z = 1.0 * 1.0 - n[0]*n[0] - n[1]*n[1];
-		if(z < 0) z = 0;
-		else z = sqrt(z);
-		if(z > 1.0) z = 1.0;
-		if(!signs[i]) z = -z;
-		if(short_normals) {
-			norms[i][0] = (int16_t)x*32767.0f;
-			norms[i][1] = (int16_t)y*32767.0f;
-			norms[i][2] = (int16_t)z*32767.0f;
-		} else
-			norms[i] = Point3f(x, y, z);
+	int count =0 ;
+	if(short_normals) {
+		Point3s *normals = (Point3s *)norm.buffer;
+		for(uint32_t i = 0; i < nvert; i++)
+			if(normals_prediction != BORDER || boundary[i])
+				decodeDiff(diffs[count++], bitstream, normals[i]);
+	} else {
+		Point3i *normals = (Point3i *)norm.buffer;
+		for(uint32_t i = 0; i < nvert; i++)
+			if(normals_prediction != BORDER || boundary[i])
+				decodeDiff(diffs[count++], bitstream, normals[i]);
 	}
-
-	/*	markBoundary();
-		Point3s *estimated_normals = data.normals(sig, node.nvert);
-		computeNormals(norm.values);
-		if(sig.vertex.hasTextures()) //hack, actually fixing normals makes it worse if textures are enabled.
-			return;
-
-		size_t diffcount = 0;
-		int signcount = 0;
-		//gert difference between original and predicted
-		for(unsigned int i = 0; i < node.nvert; i++) {
-			vcg::Point3s &N = estimated_normals[i];
-			if(!boundary[i]) continue;
-			if(diffcount >= diffs.size()) break; //TODO assert here.
-			for(int comp = 0; comp < 2; comp++) {
-				int n = N[comp]/side;
-				assert(diffcount < diffs.size());
-				int diff = decodeDiff(diffs[diffcount++], bitstream);
-				N[comp] = (n + diff)*side;
-			}
-			float x = N[0];
-			float y = N[1];
-			float z = 32767.0f*32767.0f - x*x - y*y;
-
-			if(z < 0) z = 0;
-			z = sqrt(z);
-			//sign
-			if(z > 32767.0f) z = 32767.0f;
-			bool signbit = signs[signcount++];
-			if((N[2] < 0) != signbit)
-				z = -z;
-			N[2] = (int16_t)z;
-		}
-	} */
 }
-
-
 
 void NxzDecoder::decodeColors() {
 
-	Color4b *colors = data.colors(sig, node.nvert);
+	Color4b *colors = (Color4b *)color[0].buffer;
 
-	for(int k = 0; k < 4; k++)
-		color_q[k] = stream.read<char>();
-
-	std::vector<uchar> diffs[4];
-	for(int k = 0; k < 4; k++) {
-		Tunstall tunstall;
-		tunstall.decompress(stream, diffs[k]);
-	}
+	vector<uchar> diffs;
 	BitStream bitstream;
-	stream.read(bitstream);
 
-	bool indexed = sig.face.hasIndex();
-	colors[0] = Color4b(0, 0, 0, 0);
+	for(int k = 0; k < 4; k++) {
+		Tunstall::decompress(stream, diffs);
+		stream.read(bitstream);
 
-	int count = 0;
-
-	if(indexed) {
-		for(int i = 0; i < node.nvert; i++) {
-			int l = last[i];
-			Color4b &c = colors[i];
-			for(int k = 0; k < 4; k++) {
-				c[k] = decodeDiff(diffs[k][count], bitstream);
-				if(l >= 0)
-					c[k] += colors[l][k];
-			}
-			count++;
-		}
-
-	} else {
-		Color4b on(0, 0, 0, 0);
-		for(int i = 0; i < node.nvert; i++) {
-			Color4b &c = colors[i];
-
-			for(int k = 0; k < 4; k++)
-				on[k] += decodeDiff(diffs[k][count], bitstream);
-			count++;
-			c = on;
-		}
-	}
-
-	int steps[4];
-	for(int k = 0; k < 4; k++)
-		steps[k] = (1<<(8 - color_q[k]));
-
-	for(int i = 0; i < node.nvert; i++) {
-		Color4b &c = colors[i];
-		for(int k = 0; k < 4; k++)
-			c[k] *= steps[k];
-		c = toRGB(c);
-
+		for(uint32_t i = 0; i < nvert; i++)
+			colors[i][k] = (char)decodeDiff(diffs[i], bitstream);
 	}
 }
 
+void NxzDecoder::decodeUvs() {
+	std::vector<uchar> diffs;
+	Tunstall::decompress(stream, diffs);
+
+	BitStream bitstream;
+	stream.read(bitstream);
+
+	Point2i *uvs = (Point2i *)uv.buffer;
+	for(uint32_t i = 0; i < nvert; i++)
+		decodeDiff(diffs[i], bitstream, uvs[i]);
+}
+
+void NxzDecoder::decodeDatas() {
+	for(auto &da: data) {
+		std::vector<uchar> diffs;
+		Tunstall::decompress(stream, diffs);
+
+		BitStream bitstream;
+		stream.read(bitstream);
+
+		int *d = (int *)da.buffer;
+		for(uint32_t i = 0; i < nvert; i++)
+			d[i] = decodeDiff(diffs[i], bitstream);
+	}
+}
+
+
 void NxzDecoder::dequantize() {
-	Point3i *coords = (Point3i *)coord.buffer;
-	Point3f *points = (Point3f *)coords;
-	for(uint32_t i = 0; i < nvert; i++) {
-		Point3i &q = coords[i];
-		Point3f &p = points[i];
-		p[0] = (q[0] + coord.o[0])*coord.q;
-		p[1] = (q[1] + coord.o[1])*coord.q;
-		p[2] = (q[2] + coord.o[2])*coord.q;
+	if(flags & INDEX) {
+		Point3i *coords = (Point3i *)coord.buffer;
+		Point3f *points = (Point3f *)coords;
+		for(uint32_t i = 0; i < nvert; i++) {
+			Point3i &q = coords[i];
+			Point3f &p = points[i];
+			p[0] = (q[0] + coord.o[0])*coord.q;
+			p[1] = (q[1] + coord.o[1])*coord.q;
+			p[2] = (q[2] + coord.o[2])*coord.q;
+		}
+	}
+	if(flags & NORMAL) {
 	}
 }
 
@@ -301,9 +246,9 @@ void integrateNormals(int nvert, int nface, F *index, Point3f *coords, Point3f *
 		Point3f &p1 = coords[index[1]];
 		Point3f &p2 = coords[index[2]];
 		Point3f n = (p1 - p0) ^ (p2 - p0);
-		normal[index[0]] += n;
-		normal[index[1]] += n;
-		normal[index[2]] += n;
+		normals[index[0]] += n;
+		normals[index[1]] += n;
+		normals[index[2]] += n;
 		index += 3;
 	}
 }
@@ -313,17 +258,17 @@ void NxzDecoder::computeNormals(Point3f *normals3f) {
 	Point3f *coords = (Point3f *)coord.buffer;
 
 	if(short_index)
-		integrateNormals(nvert, nface, (uint16_t *)face, coords, normals3f);
+		integrateNormals<uint16_t>(nvert, nface, (uint16_t *)face.buffer, coords, normals3f);
 	else
-		integrateNormals(nvert, nface, (uint32_t *)face, coords, normals3f);
+		integrateNormals<uint32_t>(nvert, nface, (uint32_t *)face.buffer, coords, normals3f);
 
-	for(unsigned int i = 0; i < normal.size(); i++) {
-		Point3f &n = normal3f[i];
+	for(unsigned int i = 0; i < nvert; i++) {
+		Point3f &n = normals3f[i];
 		n /= n.norm();
 	}
 }
 
-void NxzDecoder::computeNormals(Point3s *normal3s) {
+void NxzDecoder::computeNormals(Point3s *normals3s) {
 	vector<Point3f> normals3f(nvert, Point3f(0, 0, 0));
 	computeNormals(&*normals3f.begin());
 
@@ -331,7 +276,7 @@ void NxzDecoder::computeNormals(Point3s *normal3s) {
 		Point3f &nf = normals3f[i];
 		Point3s &ns = normals3s[i];
 		for(int k = 0; k < 3; k++)
-			normals3s[i][k] = (int16_t)(n[k]*32767.0f);
+			ns[k] = (int16_t)(nf[k]*32767.0f);
 	}
 }
 
@@ -372,76 +317,54 @@ void NxzDecoder::decodeMesh() {
 	decodeDatas();
 
 	uint32_t start = 0;
+	uint32_t cler = 0; //keeps track of current cler
 	for(uint32_t &end: groups) {
-		decodeFaces(bitstream, start, end);
+		decodeFaces(bitstream, start*3, end*3, cler);
 		start = end;
 	}
 
 	dequantize();
 }
 
-void NxzDecoder::decodeFaces(BitStream &bitstream, int nface, int count) {
+void NxzDecoder::decodeFaces(BitStream &bitstream, uint32_t start, uint32_t end, uint32_t &cler) {
 
 	uint16_t *faces16 = ((uint16_t *)face.buffer);
 	uint32_t *faces32 = ((uint32_t *)face.buffer);
 
-	bool hasTextures = (flags & UV) != 0;
+	bool hasUv = (flags & UV) != 0;
 
 	Point3i *coords = (Point3i *)coord.buffer;
-	Point2i *texcoords = (Point2i *)uv.buffer;
+	Point2i *uvs = (Point2i *)uv.buffer;
 
 	vector<uchar> clers;
-	vector<uchar> diffs;
-	vector<uchar> tdiffs;
-	BitStream bitstream;
 
-
-	Tunstall tunstall1;
-	tunstall1.decompress(stream, diffs);
-	if(hasTextures) {
-		Tunstall tunstall2;
-		tunstall2.decompress(stream, tdiffs);
-	}
-
-
-
-	unsigned int current = 0;          //keep track of connected component start
+	//unsigned int current = 0; //keep track of connected component start
 
 	vector<int> delayed;
 	deque<int> faceorder;
-	vector<DEdge2> front; // for fast mode we need to pop_front
-
-	unsigned int totfaces = nface;
-
-	int diff_count = 0;
-	int tdiff_count = 0;
-	int cler_count = 0;
+	vector<DEdge2> front;
 
 
-	while(totfaces > 0) {
-
+	while(start < end) {
 		if(!faceorder.size() && !delayed.size()) {
 
-			if(current == nface) break; //no more faces to encode exiting
-
-			vcg::Point3i estimated(0, 0, 0);
-			vcg::Point2i texestimated(0, 0);
+			Point3i estimated(0, 0, 0);
+			Point2i texestimated(0, 0);
 
 			int last_index = -1;
 			int index[3];
 			for(int k = 0; k < 3; k++) {
 				last.push_back(last_index);
-				int diff = diffs[diff_count++];
-				int tdiff = diff && hasTextures? tdiffs[tdiff_count++] : 0;
-				int v = decodeVertex(estimated, texestimated, bitstream, diff, tdiff);
+				int v = decodeVertex(estimated, texestimated, last_index);
 				index[k] = v;
 				if(short_index)
-					faces16[count++] = v;
+					faces16[start++] = v;
 				else
-					faces32[count++] = v;
+					faces32[start++] = v;
+
 				estimated = coords[v];
-				if(sig.vertex.hasTextures())
-					texestimated = texcoords[v];
+				if(hasUv)
+					texestimated = uvs[v];
 				last_index = v;
 			}
 			int current_edge = front.size();
@@ -449,9 +372,6 @@ void NxzDecoder::decodeFaces(BitStream &bitstream, int nface, int count) {
 				faceorder.push_back(front.size());
 				front.push_back(DEdge2(index[next_(k)], index[prev_(k)], index[k], current_edge + prev_(k), current_edge + next_(k)));
 			}
-
-			current++;
-			totfaces--;
 			continue;
 		}
 
@@ -474,37 +394,36 @@ void NxzDecoder::decodeFaces(BitStream &bitstream, int nface, int count) {
 		DEdge2 &previous_edge = front[prev];
 		DEdge2 &next_edge = front[next];
 
-		assert(cler_count < clers.size());
-		int c = clers[cler_count++];
+		int c = clers[cler++];
 		if(c == BOUNDARY) continue;
-
 
 		int first_edge = front.size();
 		int opposite = -1;
 
-		if(c == VERTEX) {
-			//we need to estimate opposite direction using v0 + v1 -
-			int v2 = e.v2;
+		if(c == VERTEX || c == SPLIT) {
 
-			Point3i predicted = coords[v0] + coords[v1] - coords[v2];
-			Point2i texpredicted(0, 0);
-			if(sig.vertex.hasTextures())
-				texpredicted = texcoords[v0] + texcoords[v1] - texcoords[v2];
+			if(c == SPLIT) {
+				opposite = bitstream.readUint(32);
+			} else {
+				//parallelogram prediction.
+				int v2 = e.v2;
+				Point3i predicted = coords[v0] + coords[v1] - coords[v2];
+				Point2i texpredicted(0, 0);
+				if(hasUv)
+					texpredicted = uvs[v0] + uvs[v1] - uvs[v2];
 
-			int diff = diffs[diff_count++];
-			int tdiff = diff && hasTextures? tdiffs[tdiff_count++] : 0;
-			opposite = decodeVertex(predicted, texpredicted, bitstream, diff, tdiff);
-			if(diff != 0)
-				last.push_back(v1); //not v0!, in encode we use face, here edge which is inverted
-
-
-
+				//not v0!, in encode we use face, here edge which is inverted
+				opposite = decodeVertex(predicted, texpredicted, v1);
+//				if(diff != 0)
+//					last.push_back(v1);
+			}
 			previous_edge.next = first_edge;
 			next_edge.prev = first_edge + 1;
 			faceorder.push_front(front.size());
 			front.push_back(DEdge2(v0, opposite, v1, prev, first_edge + 1));
 			faceorder.push_back(front.size());
 			front.push_back(DEdge2(opposite, v1, v0, first_edge, next));
+
 		} else if(c == END) {
 			previous_edge.deleted = true;
 			next_edge.deleted = true;
@@ -536,43 +455,66 @@ void NxzDecoder::decodeFaces(BitStream &bitstream, int nface, int count) {
 			assert(0);
 		}
 		if(short_index) {
-			faces16[count++] = v1;
-			faces16[count++] = v0;
-			faces16[count++] = opposite;
+			faces16[start++] = v1;
+			faces16[start++] = v0;
+			faces16[start++] = opposite;
 		} else {
-			faces32[count++] = v1;
-			faces32[count++] = v0;
-			faces32[count++] = opposite;
+			faces32[start++] = v1;
+			faces32[start++] = v0;
+			faces32[start++] = opposite;
 		}
-		totfaces--;
 	}
 }
 
-int NxzDecoder::decodeVertex(const Point3i &predicted, const Point2i &texpredicted, BitStream &bitstream, int diff, int tdiff) {
-
-	static int count = 0;
-	count++;
-	if(diff == 0) {
-		uint64_t bits = 0;
-		bitstream.read(16, bits);
-		assert(bits < node.nvert);
-		return int(bits);
-	}
-
+int NxzDecoder::decodeVertex(const Point3i &predicted, const Point2i &texpredicted,
+							 int last_index) {
 	int v = vertex_count++;
 
-
-	Point3i &p = *(((Point3i *)coord.buffer)[v]);
-	decodeDiff(diff, bitstream, p);
+	Point3i &p = ((Point3i *)coord.buffer)[v];
 	p += predicted;
-
 
 	if(flags & UV) {
 		//TODO these needds to be precomputed.
-		Point2i &u = *(((Point2i *)&uv.buffer)[v]);
-		decodeDiff(tdiff, bitstream, u);
+		Point2i &u = (((Point2i *)&uv.buffer)[v]);
 		u += texpredicted;
 	}
+
+	if(last_index <= 0)
+		return v;
+
+	if(flags & NORMAL) {
+		if(normals_prediction == DIFF) {
+			if(short_normals) {
+				Point3s &n = ((Point3s *)norm.buffer)[v];
+				Point3s &ref = ((Point3s *)norm.buffer)[last_index];
+				n[0] += ref[0];
+				n[1] += ref[1];
+				if(n[0] < -coord.q) n[0] += coord.q;
+				else if(n[0] > +coord.q) n[0] -= coord.q;
+				if(n[1] < -coord.q) n[1] += coord.q;
+				else if(n[1] > +coord.q) n[1] -= coord.q;
+			} else {
+				Point3i &n = ((Point3i *)norm.buffer)[v];
+				Point3i &ref = ((Point3i *)norm.buffer)[last_index];
+				n[0] += ref[0];
+				n[1] += ref[1];
+				if(n[0] < -coord.q) n[0] += coord.q;
+				else if(n[0] > +coord.q) n[0] -= coord.q;
+				if(n[1] < -coord.q) n[1] += coord.q;
+				else if(n[1] > +coord.q) n[1] -= coord.q;
+			}
+		}
+	}
+	if(flags & COLOR) {
+		Color4b &c = ((Color4b *)color[0].buffer)[v];
+		c += ((Color4b *)color[0].buffer)[last_index];
+	}
+
+	for(auto &da: data) {
+		int &d = ((int *)da.buffer)[v];
+		d += ((int *)da.buffer)[last_index];
+	}
+
 	return v;
 }
 
@@ -582,7 +524,7 @@ int NxzDecoder::decodeVertex(const Point3i &predicted, const Point2i &texpredict
 int NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream) {
 	if(diff == 0)
 		return 0;
-
+/*
 	//TODO could we use the max system to make it quicker?
 	uint64_t c = 1<<(diff);
 	bitstream.read(diff, c);
@@ -593,6 +535,13 @@ int NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream) {
 	else
 		val = -(val >> 1);
 	return val;
+	*/
+
+	int val = bitstream.readUint(diff);
+	int middle = (1<<diff)>>1;
+	if(val < middle)
+		val = -val -middle;
+	return val;
 }
 
 
@@ -601,9 +550,9 @@ void NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream, Point3i &p) {
 
 	//int mask = (1<<diff)-1;
 	int max = (1<<(diff-1));
-	p[0] = bitstream.readUint32(diffs) - max;
-	p[1] = bitstream.readUint32(diffs) - max;
-	p[2] = bitstream.readUint32(diffs) - max;
+	p[0] = bitstream.readUint(diff) - max;
+	p[1] = bitstream.readUint(diff) - max;
+	p[2] = bitstream.readUint(diff) - max;
 	//TODO is this really faster than just do multiple readings?
 
 	/*	bitstream.read(diff*3, bits);
@@ -612,14 +561,32 @@ void NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream, Point3i &p) {
 		bits >>= diff;
 	} */
 }
+
+void NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream, Point3s &p) {
+	//assert(diff < 22);
+
+	//int mask = (1<<diff)-1;
+	int max = (1<<(diff-1));
+	p[0] = bitstream.readUint(diff) - max;
+	p[1] = bitstream.readUint(diff) - max;
+	p[2] = bitstream.readUint(diff) - max;
+	//TODO is this really faster than just do multiple readings?
+
+	/*	bitstream.read(diff*3, bits);
+	for(int k = 2; k >= 0; k--) {
+		p[k] = (bits & mask) - max;
+		bits >>= diff;
+	} */
+}
+
 
 void NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream, Point2i &p) {
 	//assert(diff < 22);
 
 	//int mask = (1<<diff)-1;
 	int max = (1<<(diff-1));
-	p[0] = bitstream.readUint32(diffs) - max;
-	p[1] = bitstream.readUint32(diffs) - max;
+	p[0] = bitstream.readUint(diff) - max;
+	p[1] = bitstream.readUint(diff) - max;
 	//TODO is this really faster than just do multiple readings?
 
 	/*	bitstream.read(diff*3, bits);
@@ -629,5 +596,36 @@ void NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream, Point2i &p) {
 	} */
 }
 
+Point2i NxzDecoder::encodeNormal(Point3f v, int unit) {
+	Point2f p(v[0], v[1]);
+	p /= (abs(v[0]) + abs(v[1]) + abs(v[2]));
 
+	if(v[2] < 0) {
+		p = Point2f(1.0f - abs(p[1]), 1.0f - abs(p[0]));
+		if(v[0] < 0) p[0] = -p[0];
+		if(v[1] < 0) p[1] = -p[1];
+	}
+	return Point2i(p[0]*unit, p[1]*unit);
+}
+
+
+Point3f NxzDecoder::decodeNormal3i(Point2i v, int unit) {
+	Point3f n(v[0], v[1], unit - abs(v[0]) -abs(v[1]));
+	if (n[2] < 0) {
+		n[0] = ((v[0] > 0)? 1 : -1)*(unit - abs(v[1]));
+		n[1] = ((v[1] > 0)? 1 : -1)*(unit - abs(v[0]));
+	}
+	n /= n.norm();
+	return n;
+}
+
+Point3s NxzDecoder::decodeNormal3s(Point2s v, int unit) {
+	Point3f n(v[0], v[1], unit - abs(v[0]) -abs(v[1]));
+	if (n[2] < 0) {
+		n[0] = ((v[0] > 0)? 1 : -1)*(unit - abs(v[1]));
+		n[1] = ((v[1] > 0)? 1 : -1)*(unit - abs(v[0]));
+	}
+	n /= n.norm();
+	return Point3s(n[0]*32767, n[1]*32767, n[2]*32767);
+}
 

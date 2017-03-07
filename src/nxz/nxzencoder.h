@@ -43,7 +43,7 @@ public:
 	int header_size;
 
 	Entropy entropy;
-	Normals normals;
+	Normals normals_prediction;
 
 	CStream stream;
 
@@ -101,6 +101,8 @@ private:
 	void encodeDiff(std::vector<uchar> &diffs, BitStream &stream, int val);
 	void encodeDiff(std::vector<uchar> &diffs, BitStream &stream, const Point2i &val);
 	void encodeDiff(std::vector<uchar> &diffs, BitStream &stream, const Point3i &val);
+	Point2i encodeNormal(Point3f v, int unit);
+
 };
 
 } //namespace

@@ -78,11 +78,32 @@ void BitStream::reserve(int reserved) { //in uint64_t units for reading
 	pos = buffer;
 }
 
+uint64_t BitStream::writtenBits() {
+	return (size+1)*BITS_PER_WORD - bits;
+}
+
+//TODO change name but the bmask is useless
+void BitStream::writeUint(uint64_t value, int numbits) {
+	if(!allocated) reserve(256);
+	if (numbits >= bits) {
+		buff = (buff << bits) | (value >> (numbits - bits));
+		push_back(buff);
+		value &= bmask[numbits - bits];
+		numbits -= bits;
+		bits = BITS_PER_WORD;
+		buff = 0;
+	}
+
+	if (numbits > 0) {
+		buff = (buff << numbits) | value;
+		bits -= numbits;
+	}
+}
 
 void BitStream::write(uint64_t value, int numbits) {
 	if(!allocated) reserve(256);
 	value &= bmask[numbits];
-	while (numbits >= bits) {
+	if (numbits >= bits) {
 		buff = (buff << bits) | (value >> (numbits - bits));
 		push_back(buff);
 		value &= bmask[numbits - bits];
@@ -119,18 +140,16 @@ void BitStream::read(int numbits, uint64_t &retval) {
 	retval &= ~bmask[numbits];
 	uint64_t ret = 0;
 
-	while (numbits > bits){
+	if (numbits > bits){
 		ret |= buff << (numbits - bits);
 		numbits -= bits;
 		buff = *pos++;
 		bits = BITS_PER_WORD;
 	}
 
-	if (numbits > 0){
-		ret |= buff >> (bits - numbits);
-		buff &= bmask[bits - numbits]; //TODO! not needed!
-		bits -= numbits;
-	}
+	ret |= buff >> (bits - numbits);
+	buff &= bmask[bits - numbits]; //TODO! not needed!
+	bits -= numbits;
 	retval |= ret;
 }
 

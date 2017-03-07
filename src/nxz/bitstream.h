@@ -34,8 +34,13 @@ public:
 	void init(int size, uint64_t *buffer); //in uint64_t units for reading
 	void reserve(int size); //for writing
 
+
 	void write(uint64_t bits, int n);
+	void writeUint(uint64_t bits, int n);
 	void read(int n, uint64_t &bits);
+	uint32_t readUint(int numbits); //faster
+	uint64_t writtenBits();
+
 
 	void flush();
 	int size; //in uint64
