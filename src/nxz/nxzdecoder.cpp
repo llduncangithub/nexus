@@ -46,7 +46,7 @@ NxzDecoder::NxzDecoder(int len, uchar *input):
 	nvert = stream.read<int>();
 	entropy = (Entropy)stream.read<uchar>();
 
-	coord.q = stream.read<char>();
+	coord.q = stream.read<float>();
 	coord.o[0] = stream.read<int>();
 	coord.o[1] = stream.read<int>();
 	coord.o[2] = stream.read<int>();
@@ -65,12 +65,10 @@ NxzDecoder::NxzDecoder(int len, uchar *input):
 		uv.o[0] = stream.read<int>();
 		uv.o[1] = stream.read<int>();
 	}
-	int d = DATA;
-	while(flags & d) {
-		float q = stream.read<float>();
-		int o = stream.read<int>();
-		data.push_back(Attribute<int>(q, o));
-		d *= 2;
+	data.resize(stream.read<int>());
+	for(auto &da: data) {
+		da.q = stream.read<float>();
+		da.o = stream.read<int>();
 	}
 }
 
@@ -165,6 +163,8 @@ void NxzDecoder::decodeNormals() {
 
 	BitStream bitstream;
 	stream.read(bitstream);
+	if(!norm.buffer)
+		return;
 
 	int count =0 ;
 	if(short_normals) {
@@ -190,9 +190,9 @@ void NxzDecoder::decodeColors() {
 	for(int k = 0; k < 4; k++) {
 		Tunstall::decompress(stream, diffs);
 		stream.read(bitstream);
-
-		for(uint32_t i = 0; i < nvert; i++)
-			colors[i][k] = (char)decodeDiff(diffs[i], bitstream);
+		if(colors)
+			for(uint32_t i = 0; i < nvert; i++)
+				colors[i][k] = (char)decodeDiff(diffs[i], bitstream);
 	}
 }
 
@@ -202,6 +202,9 @@ void NxzDecoder::decodeUvs() {
 
 	BitStream bitstream;
 	stream.read(bitstream);
+
+	if(!uv.buffer)
+		return;
 
 	Point2i *uvs = (Point2i *)uv.buffer;
 	for(uint32_t i = 0; i < nvert; i++)
@@ -216,6 +219,7 @@ void NxzDecoder::decodeDatas() {
 		BitStream bitstream;
 		stream.read(bitstream);
 
+		if(!da.buffer) continue;
 		int *d = (int *)da.buffer;
 		for(uint32_t i = 0; i < nvert; i++)
 			d[i] = decodeDiff(diffs[i], bitstream);
@@ -235,12 +239,43 @@ void NxzDecoder::dequantize() {
 			p[2] = (q[2] + coord.o[2])*coord.q;
 		}
 	}
-	if(flags & NORMAL) {
+	if(flags & NORMAL && norm.buffer) {
+		Point3s *normals = (Point3s *)norm.buffer;
+		Point3f *normalf = (Point3f *)norm.buffer;
+		Point3i *normali = (Point3i *)norm.buffer;
+
+		if(normals_prediction == DIFF) {
+			for(uint32_t i = 0; i < nvert; i++) {
+				if(short_normals) {
+					Point3s &n = normals[i];
+					n = decodeNormal(Point2s(n[0], n[1]), norm.q);
+				} else {
+					Point3f &n = normalf[i];
+					Point3i &ni = normali[i];
+					n = decodeNormal(Point2i(ni[0], ni[1]), norm.q);
+				}
+			}
+		} else {
+			vector<Point3f> estimated(nvert, Point3f(0, 0, 0));
+			estimateNormals(&*estimated.begin());
+
+			if(normals_prediction == BORDER) {
+				if(short_index)
+					markBoundary<uint16_t>(); //mark boundary points on original vertices.
+				else
+					markBoundary<uint32_t>();
+			}
+			if(short_normals)
+				computeNormals(normals, &*estimated.begin());
+			else
+				computeNormals(normalf, &*estimated.begin());
+		}
 	}
 }
 
+
 template <class F>
-void integrateNormals(int nvert, int nface, F *index, Point3f *coords, Point3f *normals) {
+void integrateNormals(int nface, F *index, Point3f *coords, Point3f *normals) {
 	for(int i = 0; i < nface; i++) {
 		Point3f &p0 = coords[index[0]];
 		Point3f &p1 = coords[index[1]];
@@ -253,14 +288,14 @@ void integrateNormals(int nvert, int nface, F *index, Point3f *coords, Point3f *
 	}
 }
 
-void NxzDecoder::computeNormals(Point3f *normals3f) {
+void NxzDecoder::estimateNormals(Point3f *normals3f) {
 
 	Point3f *coords = (Point3f *)coord.buffer;
 
 	if(short_index)
-		integrateNormals<uint16_t>(nvert, nface, (uint16_t *)face.buffer, coords, normals3f);
+		integrateNormals<uint16_t>(nface, (uint16_t *)face.buffer, coords, normals3f);
 	else
-		integrateNormals<uint32_t>(nvert, nface, (uint32_t *)face.buffer, coords, normals3f);
+		integrateNormals<uint32_t>(nface, (uint32_t *)face.buffer, coords, normals3f);
 
 	for(unsigned int i = 0; i < nvert; i++) {
 		Point3f &n = normals3f[i];
@@ -268,17 +303,42 @@ void NxzDecoder::computeNormals(Point3f *normals3f) {
 	}
 }
 
-void NxzDecoder::computeNormals(Point3s *normals3s) {
-	vector<Point3f> normals3f(nvert, Point3f(0, 0, 0));
-	computeNormals(&*normals3f.begin());
-
+void NxzDecoder::computeNormals(Point3s *normals, Point3f *estimated) {
 	for(unsigned int i = 0; i < nvert; i++) {
-		Point3f &nf = normals3f[i];
-		Point3s &ns = normals3s[i];
-		for(int k = 0; k < 3; k++)
-			ns[k] = (int16_t)(nf[k]*32767.0f);
+		Point3f &e = estimated[i];
+		Point3s &d = normals[i];
+
+		if(normals_prediction == ESTIMATED || boundary[i]) {
+			Point2i qn = encodeNormal(e, (int)norm.q);
+			d[0] += qn[0];
+			d[1] += qn[1];
+			d = decodeNormal(Point2s(d[0], d[1]), (int)norm.q);
+		} else {//no correction
+			for(int k = 0; k < 3; k++)
+				d[k] = (int16_t)(e[k]*32767.0f);
+		}
 	}
 }
+
+void NxzDecoder::computeNormals(Point3f *normals, Point3f *estimated) {
+	Point3i *diffs = (Point3i *)normals;
+	for(unsigned int i = 0; i < nvert; i++) {
+		Point3f &e = estimated[i];
+		Point3i &d = diffs[i];
+		Point3f &n = normals[i];
+		if(normals_prediction == ESTIMATED || boundary[i]) {
+			Point2i qn = encodeNormal(e, (int)norm.q);
+			d[0] += qn[0];
+			d[1] += qn[1];
+			n = decodeNormal(Point2i(d[0], d[1]), (int)norm.q);
+		} else //no correction
+			n = e;
+	}
+}
+
+
+
+
 
 static int next_(int t) {
 	t++;
@@ -596,6 +656,7 @@ void NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream, Point2i &p) {
 	} */
 }
 
+
 Point2i NxzDecoder::encodeNormal(Point3f v, int unit) {
 	Point2f p(v[0], v[1]);
 	p /= (abs(v[0]) + abs(v[1]) + abs(v[2]));
@@ -609,7 +670,7 @@ Point2i NxzDecoder::encodeNormal(Point3f v, int unit) {
 }
 
 
-Point3f NxzDecoder::decodeNormal3i(Point2i v, int unit) {
+Point3f NxzDecoder::decodeNormal(Point2i v, int unit) {
 	Point3f n(v[0], v[1], unit - abs(v[0]) -abs(v[1]));
 	if (n[2] < 0) {
 		n[0] = ((v[0] > 0)? 1 : -1)*(unit - abs(v[1]));
@@ -619,7 +680,7 @@ Point3f NxzDecoder::decodeNormal3i(Point2i v, int unit) {
 	return n;
 }
 
-Point3s NxzDecoder::decodeNormal3s(Point2s v, int unit) {
+Point3s NxzDecoder::decodeNormal(Point2s v, int unit) {
 	Point3f n(v[0], v[1], unit - abs(v[0]) -abs(v[1]));
 	if (n[2] < 0) {
 		n[0] = ((v[0] > 0)? 1 : -1)*(unit - abs(v[1]));

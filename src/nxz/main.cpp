@@ -51,38 +51,50 @@ int main(int argc, char *argv[]) {
 		index.push_back(f.V(2) - start);
 	}
 
-	nx::NxzEncoder encoder(coords.size(), index.size()/3);
+
+	int nvert = mesh.vert.size();
+	int nface = mesh.face.size();
+
+	nx::NxzEncoder encoder(nvert, nface);
 	encoder.addCoords((float *)&*coords.begin(), &*index.begin());
 	encoder.addNormals((float *)&*normals.begin(), 10, nx::ESTIMATED);
 	encoder.addColors((unsigned char *)&*colors.begin());
 	encoder.encode();
 
-	cout << "Nvert: " << coords.size() << " Nface: " << index.size()/3 << endl;
+	cout << "Nvert: " << nvert << " Nface: " << nface << endl;
 	cout << "Compressed to: " << encoder.stream.size() << endl;
-	cout << "Ratio: " << 100.0f*encoder.stream.size()/(coords.size()*12 + index.size()*12) << endl;
-	cout << "Bpv: " << 8.0f*encoder.stream.size()/coords.size() << endl << endl;
+	cout << "Ratio: " << 100.0f*encoder.stream.size()/(nvert*12 + nface*12) << endl;
+	cout << "Bpv: " << 8.0f*encoder.stream.size()/nvert << endl << endl;
 
-	cout << "Header: " << encoder.header_size << " bpv: " << (float)encoder.header_size/coords.size() << endl;
+	cout << "Header: " << encoder.header_size << " bpv: " << (float)encoder.header_size/nvert << endl;
 
-	cout << "Coord bpv; " << 8.0f*encoder.coord.size/coords.size() << endl;
+	cout << "Coord bpv; " << 8.0f*encoder.coord.size/nvert << endl;
 	cout << "Coord q: " << encoder.coord.q << endl << endl;
 
-	cout << "Normal bpv; " << 8.0f*encoder.norm.size/coords.size() << endl;
+	cout << "Normal bpv; " << 8.0f*encoder.norm.size/nvert << endl;
 	cout << "Normal q: " << encoder.norm.q << endl << endl;
 
-	cout << "Color LCCA bpv; " << 8.0f*encoder.color[0].size/coords.size() << " "
-			<< 8.0f*encoder.color[1].size/coords.size() << " "
-			<< 8.0f*encoder.color[2].size/coords.size() << " "
-			<< 8.0f*encoder.color[3].size/coords.size() << " " << endl;
+	cout << "Color LCCA bpv; " << 8.0f*encoder.color[0].size/nvert << " "
+			<< 8.0f*encoder.color[1].size/nvert << " "
+			<< 8.0f*encoder.color[2].size/nvert << " "
+			<< 8.0f*encoder.color[3].size/nvert << " " << endl;
 	cout << "Color LCCA q: " << encoder.color[0].q << " "
 		 << encoder.color[1].q << " "
 		 << encoder.color[2].q << " "
 		 << encoder.color[3].q << " " << endl << endl;
 
 
-	cout << "Face bpv; " << 8.0f*encoder.face.size/coords.size() << endl;
+	cout << "Face bpv; " << 8.0f*encoder.face.size/nvert << endl;
 
+	nvert = encoder.nvert;
+	nface = encoder.nface;
 	nx::NxzDecoder decoder(encoder.stream.size(), encoder.stream.buffer);
+	std::vector<Point3f> recoords(nvert);
+	std::vector<uint32_t> reindex(nface*3);
+	decoder.setCoords((float *)&*recoords.begin());
+	decoder.setIndex(&*reindex.begin());
+	decoder.decode();
+
 	return 0;
 }
 

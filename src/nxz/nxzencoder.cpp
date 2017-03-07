@@ -263,7 +263,7 @@ void NxzEncoder::encode() {
 
 	stream.write<int>(flags);
 	stream.write<int>(nvert);
-	stream.write<char>(entropy);
+	stream.write<uchar>(entropy);
 
 	stream.write<float>(coord.q);
 	stream.write<int>(coord.o[0]);
@@ -286,6 +286,7 @@ void NxzEncoder::encode() {
 		stream.write<int>(uv.o[1]);
 	}
 
+	stream.write<int>(data.size());
 	for(auto &d: data) {
 		stream.write<float>(d.q);
 		stream.write<int>(d.o);
@@ -405,13 +406,13 @@ void NxzEncoder::encodeNormals() {
 void NxzEncoder::encodeColors() {
 
 	//TODO: Slightly more efficient to use only one bitstream,
-	//TODO again: worth separating components?
 
 	for(int k = 0; k < 4; k++) {
 		BitStream bitstream(nvert/2);
 		vector<uchar> diffs;
 
 		//use complement to 255 (hence char conversion)
+
 		for(uchar &c: color[k].diffs)
 			encodeDiff(diffs, bitstream, (char)c);
 
@@ -928,19 +929,19 @@ if(d < 0)
 
 //val can be zero.
 void NxzEncoder::encodeDiff(vector<uchar> &diffs, BitStream &stream, int val) {
-	/*
+/* OLD
+	if(val == 0) {
+		diffs.push_back(0);
+		return;
+	}
 	val = Tunstall::toUint(val)+1;
 	int ret = ilog2(val);
 	diffs.push_back(ret);
 	if(ret > 0)
-		stream.write(val, ret); */
-
-	int ref = val;
-
+		stream.write(val, ret);
+*/
 	if(val == 0) {
 		diffs.push_back(0);
-//		cout << "Encode diff: " << ref << " to: " << 0 << " bits and " << 0 << " as bits " << endl;
-
 		return;
 	}
 	int ret = ilog2(abs(val)) + 1;  //0 -> 0, [1,-1] -> 1 [-2,-3,2,3] -> 2
@@ -948,8 +949,6 @@ void NxzEncoder::encodeDiff(vector<uchar> &diffs, BitStream &stream, int val) {
 	int middle = (1<<ret)>>1;
 	if(val < 0) val = -val -middle;
 	stream.writeUint(val, ret);
-
-	//cout << "Encode diff: " << ref << " to: " << ret << " bits and " << val << " as bits " << endl;
 }
 
 void NxzEncoder::encodeDiff(vector<uchar> &diffs, BitStream &bitstream, const Point2i &val) {

@@ -53,6 +53,7 @@ public:
 	bool hasUvs() { return flags & UV; }
 	bool dataCount() { return data.size(); }
 	bool hasIndex() { return flags & INDEX; }
+
 	void setCoords(float *buffer);
 	void setNormals(float *buffer);
 	void setNormals(int16_t *buffer);
@@ -86,8 +87,9 @@ private:
 
 	void decodeFaces(BitStream &stream, uint32_t start, uint32_t end, uint32_t &cler);
 	//TODO these are in common with MeshCoder, we should make a NxzEncoder class and move the common parts
-	void computeNormals(Point3f *estimated);
-	void computeNormals(Point3s *normals3s);
+	void estimateNormals(Point3f *normals3f);
+	void computeNormals(Point3f *normals, Point3f *estimated);
+	void computeNormals(Point3s *normals, Point3f *estimated);
 
 	template <class F> void markBoundary();
 
@@ -100,8 +102,8 @@ private:
 	void decodeDiff(uchar diff, BitStream &stream, Point3s &p);
 	void decodeDiff(uchar diff, BitStream &stream, Point2i &p);
 	Point2i encodeNormal(Point3f v, int unit);
-	Point3f decodeNormal3i(Point2i v, int unit);
-	Point3s decodeNormal3s(Point2s v, int unit);
+	Point3f decodeNormal(Point2i v, int unit);
+	Point3s decodeNormal(Point2s v, int unit);
 
 	void dequantize();
 };
@@ -111,13 +113,13 @@ template <class F> void NxzDecoder::markBoundary() {
 
 	std::vector<int> count(nvert, 0);
 	F *f = (F *)face.buffer;
-	for(int i = 0; i < nface; i++) {
+	for(uint32_t i = 0; i < nface; i++) {
 		count[f[0]] += (int)f[1] - (int)f[2];
 		count[f[1]] += (int)f[2] - (int)f[0];
 		count[f[2]] += (int)f[0] - (int)f[1];
 		f += 3;
 	}
-	for(int i = 0; i < nvert; i++)
+	for(uint32_t i = 0; i < nvert; i++)
 		if(count[i] != 0)
 			boundary[i] = true;
 }
