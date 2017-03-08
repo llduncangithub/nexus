@@ -42,12 +42,11 @@ public:
 	Attribute<int> face;
 	int header_size;
 
-	Entropy entropy;
 	Normals normals_prediction;
 
-	CStream stream;
+	Stream stream;
 
-	NxzEncoder(uint32_t _nvert, uint32_t _nface = 0, Entropy en = TUNSTALL);
+	NxzEncoder(uint32_t _nvert, uint32_t _nface = 0, Stream::Entropy entropy = Stream::TUNSTALL);
 	void addCoords(float *buffer, float q = 0, Point3f o = Point3f(FLT_MAX));
 	void addCoords(float *buffer, uint32_t *index, float q = 0, Point3f o = Point3f(FLT_MAX));
 	void addCoords(float *buffer, uint16_t *index, float q = 0, Point3f o = Point3f(FLT_MAX));

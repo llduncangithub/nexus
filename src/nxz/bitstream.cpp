@@ -43,7 +43,6 @@ static uint64_t bmask[] = {
 
 //TODO is it faster using bmask or using ~((1L<<d)-1)?
 
-
 BitStream::BitStream(int reserved) { //for write
 	reserve(reserved);
 
@@ -128,10 +127,10 @@ uint32_t BitStream::readUint(int numbits) {
 		buff = *pos++;
 		bits = BITS_PER_WORD;
 	}
-
 	ret |= buff >> (bits - numbits);
-	buff &= bmask[bits - numbits]; //TODO! not needed!
+	buff &= bmask[bits - numbits];
 	bits -= numbits;
+
 	return ret;
 }
 

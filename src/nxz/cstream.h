@@ -28,70 +28,78 @@ typedef unsigned char uchar;
 namespace nx {
 
 
-class CStream {
-public:
+class Stream {
+protected:
+
 	uchar *buffer;
 	uchar *pos; //for reading.
 	int allocated;
-	int stopwatch;
+	int stopwatch; //used to measure stream partial size.
 
-	CStream(): buffer(NULL), pos(NULL), allocated(0), stopwatch(0) {}
-	CStream(int reserved) {
-		reserve(reserved);
-	}
-	CStream(int _size, unsigned char *_buffer) {
+public:
+	enum Entropy { NONE = 0, TUNSTALL = 1, HUFFMAN = 2, ZLIB = 3, LZ4 = 4 };
+	Entropy entropy;
+
+	Stream(): buffer(NULL), pos(NULL), allocated(0), stopwatch(0), entropy(TUNSTALL) {}
+
+	Stream(int _size, uchar *_buffer) {
 		init(_size, _buffer);
 	}
-	~CStream() {
+
+	~Stream() {
 		if(allocated)
 			delete []buffer;
 	}
+
+	int size() { return pos - buffer; }
+	uchar *data() { return buffer; }
+	int elapsed() {
+		int e = size() - stopwatch; stopwatch = size();
+		return e;
+	}
+
+	int  compress(uint32_t size, uchar *data);
+	void decompress(std::vector<uchar> &data);
+	int  tunstall_compress(unsigned char *data, int size);
+	void tunstall_decompress(std::vector<uchar> &data);
+
+#ifdef ENTROPY_TESTS
+	int  zlib_compress(uchar *data, int size);
+	void zlib_decompress(std::vector<uchar> &data);
+	int  lz4_compress(uchar *data, int size);
+	void lz4_decompress(std::vector<uchar> &data);
+#endif
+
 	void reserve(int reserved) {
 		allocated = reserved;
 		stopwatch = 0;
 		pos = buffer = new uchar[allocated];
 	}
-	void init(int /*_size*/, unsigned char *_buffer) {
+
+	void init(int /*_size*/, uchar *_buffer) {
 		buffer = _buffer;
 		pos = buffer;
 		allocated = 0;
 	}
+
 	void rewind() { pos = buffer; }
-	int size() { return pos - buffer; }
-	int elapsed() { int e = size() - stopwatch; stopwatch = size(); return e; }
-	void grow(int s) {
-		int size = pos - buffer;
-		if(size + s > allocated) { //needs more spac
-			int new_size = allocated*2;
-			while(new_size < size + s)
-				new_size *= 2;
-			uchar *b = new uchar[new_size];
-			memcpy(b, buffer, allocated);
-			delete []buffer;
-			buffer = b;
-			pos = buffer + size;
-			allocated = new_size;
-		}
+
+	template<class T> void write(T c) {
+		grow(sizeof(T));
+		*(T *)pos = c;
+		pos += sizeof(T);
 	}
 
-	void push(void *b, int s) {
-		grow(s);
-		memcpy(pos, b, s);
-		pos += s;
-	}
-
-	template<class T> void write(T c) { grow(sizeof(T)); *(T *)pos = c; pos += sizeof(T); }
-	//usually we know how long c is for some other reason
-	template<class T> void writeArray(int s, T*c) {
+	template<class T> void writeArray(int s, T *c) {
 		int bytes = s*sizeof(T);
 		push(c, bytes);
 	}
 
 	void write(BitStream &stream) {
 		stream.flush();
-		//need to pad to 32bits
+		//padding to 32 bit is needed for javascript reading (which uses int words.), mem needs to be aligned.
 		write<int>((int)stream.size);
-		//padding is needed for javascript reading.
+
 		int pad = (pos - buffer) & 0x3;
 		if(pad != 0)
 			pad = 4 - pad;
@@ -116,12 +124,37 @@ public:
 
 	void read(BitStream &stream) {
 		int s = read<int>();
+		//padding to 32 bit is needed for javascript reading (which uses int words.), mem needs to be aligned.
 		int pad = (pos - buffer) & 0x3;
 		if(pad != 0)
 			pos += 4 - pad;
 		stream.init(s, (uint64_t *)pos);
 		pos += s*sizeof(uint64_t);
 	}
+
+	void grow(int s) {
+		if(allocated == 0)
+			reserve(1024);
+		int size = pos - buffer;
+		if(size + s > allocated) { //needs more spac
+			int new_size = allocated*2;
+			while(new_size < size + s)
+				new_size *= 2;
+			uchar *b = new uchar[new_size];
+			memcpy(b, buffer, allocated);
+			delete []buffer;
+			buffer = b;
+			pos = buffer + size;
+			allocated = new_size;
+		}
+	}
+
+	void push(void *b, int s) {
+		grow(s);
+		memcpy(pos, b, s);
+		pos += s;
+	}
+
 };
 
 } //namespace

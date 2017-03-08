@@ -18,7 +18,6 @@ for more details.
 #ifndef NX_TUNSTALL_H
 #define NX_TUNSTALL_H
 
-#include "cstream.h"
 #include <vector>
 
 
@@ -42,8 +41,8 @@ public:
 	//word size 8 means use 8 bit blocks.
 	Tunstall(int _wordsize = 8, int _lookup = 2): wordsize(_wordsize), lookup_size(_lookup) {}
 
-	static int compress(CStream &stream, unsigned char *data, int size); //return compressed size
-	static void decompress(CStream &stream, std::vector<unsigned char> &output); //allocate and decompress
+//	static int compress(Stream &stream, unsigned char *data, int size); //return compressed size
+//	static void decompress(Stream &stream, std::vector<unsigned char> &output); //allocate and decompress
 
 	//computes symbol probabilities from the stream
 	void getProbabilities(unsigned char *data, int size);

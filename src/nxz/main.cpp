@@ -1,7 +1,6 @@
 #include "nxzencoder.h"
 #include "nxzdecoder.h"
 
-
 #include<vcg/complex/complex.h>
 #include<wrap/io_trimesh/import_off.h>
 #include<wrap/io_trimesh/import_ply.h>
@@ -9,6 +8,8 @@
 
 #include<wrap/io_trimesh/export_ply.h>
 
+#include <QTime>
+#include <QFile>
 
 class NxVertex; class NxEdge; class NxFace;
 struct NxUsedTypes : public vcg::UsedTypes<vcg::Use<NxVertex>   ::AsVertexType,
@@ -57,10 +58,10 @@ int main(int argc, char *argv[]) {
 	uint32_t nvert = mesh.vert.size();
 	uint32_t nface = mesh.face.size();
 
-	nx::NxzEncoder encoder(nvert, nface);
+	nx::NxzEncoder encoder(nvert, nface, nx::Stream::TUNSTALL);
 	encoder.addCoords((float *)&*coords.begin(), &*index.begin());
 	//TODO: test BORDER e DIFF
-	encoder.addNormals((float *)&*normals.begin(), 8, nx::ESTIMATED);
+	encoder.addNormals((float *)&*normals.begin(), 10, nx::DIFF);
 	encoder.addColors((unsigned char *)&*colors.begin());
 	encoder.encode();
 
@@ -96,15 +97,27 @@ int main(int argc, char *argv[]) {
 	std::vector<vcg::Color4b> recolors(nvert);
 	std::vector<uint32_t> reindex(nface*3);
 
-	for(int i = 0; i < 500; i++) {
-		nx::NxzDecoder decoder(encoder.stream.size(), encoder.stream.buffer);
+	QTime time;
+	time.start();
+
+	int iter = 2;
+	for(int i = 0; i < iter; i++) {
+		nx::NxzDecoder decoder(encoder.stream.size(), encoder.stream.data());
 		decoder.setCoords((float *)&*recoords.begin());
 		decoder.setNormals((float *)&*renorms.begin());
 		decoder.setColors((uchar *)&*recolors.begin());
 		decoder.setIndex(&*reindex.begin());
 		decoder.decode();
 	}
-	cout << "TOT M faces: " << nface*500/1000000.0f << endl;
+
+	int delta = time.elapsed();
+	int mfaces = nface*iter/1000000.0f;
+	cout << "TOT M faces: " << mfaces << " in: " << delta << "ms or " << 1000*mfaces/delta << " MT/s" << endl;
+
+	QFile file("test.nxz");
+	file.open(QFile::WriteOnly);
+	file.write((char *)encoder.stream.data(), encoder.stream.size());
+
 
 	NxMesh out;
 	NxMesh::VertexIterator vi = vcg::tri::Allocator<NxMesh>::AddVertices(out, nvert);

@@ -32,11 +32,12 @@ struct TSymbol {
 	uint32_t probability;
 };
 
-int Tunstall::compress(CStream &stream, unsigned char *data, int size) {
+/* Left as an example of how to compress to a stream
+
+int Tunstall::compress(Stream &stream, unsigned char *data, int size) {
 
 	Tunstall t;
 	t.getProbabilities(data, size);
-
 
 	t.createDecodingTables();
 	t.createEncodingTables();
@@ -56,7 +57,7 @@ int Tunstall::compress(CStream &stream, unsigned char *data, int size) {
 	return 1 + t.probabilities.size()*2 + 4 + 4 + compressed_size;
 }
 
-void Tunstall::decompress(CStream &stream, std::vector<unsigned char> &data) {
+void Tunstall::decompress(Stream &stream, std::vector<unsigned char> &data) {
 
 	Tunstall t;
 	int nsymbols = stream.read<uchar>();
@@ -73,7 +74,7 @@ void Tunstall::decompress(CStream &stream, std::vector<unsigned char> &data) {
 
 	if(size)
 		t.decompress(compressed_data, compressed_size, &*data.begin(), size);
-}
+} */
 
 
 void Tunstall::getProbabilities(unsigned char *data, int size) {
@@ -191,7 +192,7 @@ void Tunstall::createDecodingTables() {
 			pos += s.length;
 		}
 	}
-	assert(index.size() <= dictionary_size);
+	assert((int)index.size() <= dictionary_size);
 }
 
 void Tunstall::createEncodingTables() {
@@ -311,7 +312,7 @@ int Tunstall::decompress(unsigned char *data, unsigned char *output, int output_
 	exit(0);
 	while(1) {
 		int symbol = *data++;
-		assert(symbol < index.size());
+		assert(symbol < (int)index.size());
 		int start = index[symbol];
 		int length = lengths[symbol];
 		if(output + length >= end_output) {

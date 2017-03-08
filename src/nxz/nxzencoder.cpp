@@ -35,12 +35,14 @@ static int ilog2(uint64_t p) {
 }
 
 
-NxzEncoder::NxzEncoder(uint32_t _nvert, uint32_t _nface, Entropy en):
+NxzEncoder::NxzEncoder(uint32_t _nvert, uint32_t _nface, Stream::Entropy entropy):
 	flags(0), nvert(_nvert), nface(_nface),
 	coord(0.0f, Point3i(0)),
 	norm(0.0f, Point2i(0)),
 	uv(0.0f, Point2i(0)),
-	header_size(0), entropy(en), normals_prediction(ESTIMATED), current_vertex(0) {
+	header_size(0), normals_prediction(ESTIMATED), current_vertex(0) {
+
+	stream.entropy = entropy;
 	/*	coord_o(2147483647), uv_o(2147483647), coord_q(0), uv_q(0), coord_bits(12), uv_bits(12), norm_bits(10),
 	coord_size(0), normal_size(0), color_size(0), face_size(0), uv_size(0) {
 	color_bits[0] = color_bits[1] = color_bits[2] = color_bits[3] = 6; */
@@ -160,7 +162,6 @@ void NxzEncoder::setCoordBits() {
 
 /* NORMALS */
 
-
 void NxzEncoder::addNormals(float *buffer, int bits, Normals no) {
 	normals_prediction = no;
 	flags |= NORMAL;
@@ -271,7 +272,7 @@ void NxzEncoder::encode() {
 
 	stream.write<int>(flags);
 	stream.write<int>(nvert);
-	stream.write<uchar>(entropy);
+	stream.write<uchar>(stream.entropy);
 
 	stream.write<float>(coord.q);
 	stream.write<int>(coord.o[0]);
@@ -306,6 +307,7 @@ void NxzEncoder::encode() {
 		encodePointCloud();
 }
 
+//TODO: test pointclouds
 void NxzEncoder::encodePointCloud() {
 	std::vector<ZPoint> zpoints(nvert);
 
@@ -378,7 +380,7 @@ void NxzEncoder::encodeZPoints(std::vector<ZPoint> &zpoints) {
 		bitstream.write(q.bits, d); //rmember to add a 1, since
 	}
 
-	Tunstall::compress(stream, &*diffs.begin(), diffs.size());
+	stream.compress(diffs.size(), &*diffs.begin());
 	stream.write(bitstream);
 	coord.size = stream.elapsed();
 }
@@ -391,7 +393,7 @@ void NxzEncoder::encodeCoords() {
 	for(Point3i &d: coord.diffs)
 		encodeDiff(diffs, bitstream, d);
 
-	Tunstall::compress(stream, &*diffs.begin(), diffs.size());
+	stream.compress(diffs.size(), &*diffs.begin());
 	stream.write(bitstream);
 	coord.size = stream.elapsed();
 }
@@ -405,7 +407,7 @@ void NxzEncoder::encodeNormals() {
 		if(normals_prediction != BORDER || boundary[i])
 			encodeDiff(diffs, bitstream, norm.diffs[i]);
 
-	Tunstall::compress(stream, &*diffs.begin(), diffs.size());
+	stream.compress(diffs.size(), &*diffs.begin());
 	stream.write(bitstream);
 
 	norm.size = stream.elapsed();
@@ -424,7 +426,7 @@ void NxzEncoder::encodeColors() {
 		for(uchar &c: color[k].diffs)
 			encodeDiff(diffs, bitstream, (char)c);
 
-		Tunstall::compress(stream, &*diffs.begin(), diffs.size());
+		stream.compress(diffs.size(), &*diffs.begin());
 		stream.write(bitstream);
 		color[k].size = stream.elapsed();
 	}
@@ -438,7 +440,7 @@ void NxzEncoder::encodeUvs() {
 	for(Point2i &u: uv.diffs)
 		encodeDiff(diffs, bitstream, u);
 
-	Tunstall::compress(stream, &*diffs.begin(), diffs.size());
+	stream.compress(diffs.size(), &*diffs.begin());
 	stream.write(bitstream);
 	uv.size = stream.elapsed();
 }
@@ -451,7 +453,7 @@ void NxzEncoder::encodeDatas() {
 		for(int &v: da.diffs)
 			encodeDiff(diffs, bitstream, v);
 
-		Tunstall::compress(stream, &*diffs.begin(), diffs.size());
+		stream.compress(diffs.size(), &*diffs.begin());
 		stream.write(bitstream);
 		da.size += stream.elapsed();
 	}
@@ -516,7 +518,7 @@ void NxzEncoder::encodeMesh() {
 		start = end;
 	}
 
-	Tunstall::compress(stream, &*clers.begin(), clers.size());
+	stream.compress(clers.size(), &*clers.begin());
 	face.size = stream.elapsed();
 	stream.write(bitstream);
 
@@ -870,15 +872,12 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 	}
 }
 
-
-
-
 bool NxzEncoder::encodeVertex(int target, const Point3i &predicted, const Point2i &texpredicted, int last) {
 
 	assert(encoded[target] == -1);
 
 	//notice how vertex needs to be reordered
-	coord.diffs[current_vertex] = coord.values[target];// - predicted;
+	coord.diffs[current_vertex] = coord.values[target] - predicted;
 
 	if((flags & NORMAL)) {
 		Point2i &dt = norm.diffs[current_vertex];

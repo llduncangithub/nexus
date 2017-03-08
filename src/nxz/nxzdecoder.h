@@ -42,10 +42,8 @@ public:
 	std::vector<Attribute<int>> data;
 	Attribute<int> face;
 
-	Entropy entropy;
 	Normals normals_prediction;
-
-	CStream stream;
+	Stream stream;
 
 	NxzDecoder(int len, uchar *input);
 	bool hasNormals() { return flags & NORMAL; }
@@ -101,6 +99,7 @@ private:
 	void decodeDiff(uchar diff, BitStream &stream, Point3i &p);
 	void decodeDiff(uchar diff, BitStream &stream, Point3s &p);
 	void decodeDiff(uchar diff, BitStream &stream, Point2i &p);
+	void decodeDiff(uchar diff, BitStream &stream, Point2s &p);
 
 	void dequantize();
 };

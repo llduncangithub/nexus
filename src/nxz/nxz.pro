@@ -16,18 +16,23 @@ SOURCES += main.cpp \
     nxzencoder.cpp \
     tunstall.cpp \
     bitstream.cpp \
-    ../../../vcglib/wrap/ply/plylib.cpp
+    ../../../vcglib/wrap/ply/plylib.cpp \
+    cstream.cpp
 HEADERS += \
     nxzdecoder.h \
     nxzencoder.h \
     point.h \
     zpoint.h \
-    cstream.h \
+    Stream.h \
     tunstall.h \
     bitstream.h \
     ../../../vcglib/wrap/ply/plylib.h \
-    nxz.h
+    nxz.h \
+    cstream.h
 
 DISTFILES += \
     plan.md
 
+#uncomment this for tests with other entropy coders.
+#DEFINES += ENTROPY_TESTS
+#LIBS += -lz $$PWD/lz4/liblz4.a
