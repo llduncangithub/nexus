@@ -85,7 +85,7 @@ private:
 	void encodeZPoints(std::vector<ZPoint> &zpoints);
 
 	void encodeMesh();
-	void encodeFaces(BitStream &bitstream, int start, int end);
+	void encodeFaces(int start, int end, BitStream &bitstream);
 
 	void encodeCoords();
 	void encodeNormals();
@@ -96,13 +96,11 @@ private:
 	void computeNormals(std::vector<Point2i> &estimated_normals);
 	void markBoundary();
 
-	void encodeVertex(int target, const Point3i &predicted, const Point2i &texpredicted, BitStream &bitstream, int last);
+	bool encodeVertex(int target, const Point3i &predicted, const Point2i &texpredicted, int last);
 
 	void encodeDiff(std::vector<uchar> &diffs, BitStream &stream, int val);
 	void encodeDiff(std::vector<uchar> &diffs, BitStream &stream, const Point2i &val);
 	void encodeDiff(std::vector<uchar> &diffs, BitStream &stream, const Point3i &val);
-	Point2i encodeNormal(Point3f v, int unit);
-
 };
 
 } //namespace

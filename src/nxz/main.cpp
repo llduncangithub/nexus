@@ -7,6 +7,9 @@
 #include<wrap/io_trimesh/import_ply.h>
 #include<vcg/complex/algorithms/update/normal.h>
 
+#include<wrap/io_trimesh/export_ply.h>
+
+
 class NxVertex; class NxEdge; class NxFace;
 struct NxUsedTypes : public vcg::UsedTypes<vcg::Use<NxVertex>   ::AsVertexType,
 											  vcg::Use<NxEdge>     ::AsEdgeType,
@@ -20,7 +23,6 @@ using namespace std;
 using namespace vcg;
 
 int main(int argc, char *argv[]) {
-
 	if(argc != 2) {
 		cerr << "Usage: " << argv[0] << " [file.ply]\n";
 		return 0;
@@ -52,12 +54,13 @@ int main(int argc, char *argv[]) {
 	}
 
 
-	int nvert = mesh.vert.size();
-	int nface = mesh.face.size();
+	uint32_t nvert = mesh.vert.size();
+	uint32_t nface = mesh.face.size();
 
 	nx::NxzEncoder encoder(nvert, nface);
 	encoder.addCoords((float *)&*coords.begin(), &*index.begin());
-	encoder.addNormals((float *)&*normals.begin(), 10, nx::ESTIMATED);
+	//TODO: test BORDER e DIFF
+	encoder.addNormals((float *)&*normals.begin(), 8, nx::ESTIMATED);
 	encoder.addColors((unsigned char *)&*colors.begin());
 	encoder.encode();
 
@@ -88,12 +91,44 @@ int main(int argc, char *argv[]) {
 
 	nvert = encoder.nvert;
 	nface = encoder.nface;
-	nx::NxzDecoder decoder(encoder.stream.size(), encoder.stream.buffer);
-	std::vector<Point3f> recoords(nvert);
+	std::vector<vcg::Point3f> recoords(nvert);
+	std::vector<vcg::Point3f> renorms(nvert);
+	std::vector<vcg::Color4b> recolors(nvert);
 	std::vector<uint32_t> reindex(nface*3);
-	decoder.setCoords((float *)&*recoords.begin());
-	decoder.setIndex(&*reindex.begin());
-	decoder.decode();
+
+	for(int i = 0; i < 500; i++) {
+		nx::NxzDecoder decoder(encoder.stream.size(), encoder.stream.buffer);
+		decoder.setCoords((float *)&*recoords.begin());
+		decoder.setNormals((float *)&*renorms.begin());
+		decoder.setColors((uchar *)&*recolors.begin());
+		decoder.setIndex(&*reindex.begin());
+		decoder.decode();
+	}
+	cout << "TOT M faces: " << nface*500/1000000.0f << endl;
+
+	NxMesh out;
+	NxMesh::VertexIterator vi = vcg::tri::Allocator<NxMesh>::AddVertices(out, nvert);
+	vcg::tri::Allocator<NxMesh>::AddFaces(out, nface);
+	for(uint32_t i = 0; i < nvert; i++) {
+		out.vert[i].P() = recoords[i];
+		out.vert[i].N() = renorms[i];
+		out.vert[i].C() = recolors[i];
+	}
+
+	cout << "Nvert: " << nvert << " nface: " << nface << endl;
+	for(uint32_t i = 0; i < nface; i++) {
+		assert(reindex[i*3] < nvert);
+		assert(reindex[i*3+1] < nvert);
+		assert(reindex[i*3+2] < nvert);
+
+		out.face[i].V(0) = &*vi + reindex[i*3+0];
+		out.face[i].V(1) = &*vi + reindex[i*3+1];
+		out.face[i].V(2) = &*vi + reindex[i*3+2];
+	}
+
+	vcg::tri::io::ExporterPLY<NxMesh>::Save(out, "test.ply",
+		tri::io::Mask::IOM_VERTCOLOR | tri::io::Mask::IOM_VERTNORMAL );
+
 
 	return 0;
 }

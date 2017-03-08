@@ -69,9 +69,9 @@ private:
 	bool short_normals;
 	bool short_index;
 	std::vector<bool> boundary;
-	std::vector<int> last;
 	std::vector<uint32_t> groups;
 	std::vector<uchar> clers;
+
 	int vertex_count; //keep tracks of current decoding vertex
 
 	void decodePointCloud();
@@ -85,7 +85,7 @@ private:
 
 	void shuffle(); //shuffle vertices for point clouds
 
-	void decodeFaces(BitStream &stream, uint32_t start, uint32_t end, uint32_t &cler);
+	void decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitStream &bitstream);
 	//TODO these are in common with MeshCoder, we should make a NxzEncoder class and move the common parts
 	void estimateNormals(Point3f *normals3f);
 	void computeNormals(Point3f *normals, Point3f *estimated);
@@ -101,9 +101,6 @@ private:
 	void decodeDiff(uchar diff, BitStream &stream, Point3i &p);
 	void decodeDiff(uchar diff, BitStream &stream, Point3s &p);
 	void decodeDiff(uchar diff, BitStream &stream, Point2i &p);
-	Point2i encodeNormal(Point3f v, int unit);
-	Point3f decodeNormal(Point2i v, int unit);
-	Point3s decodeNormal(Point2s v, int unit);
 
 	void dequantize();
 };
