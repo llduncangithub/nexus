@@ -258,8 +258,7 @@ void NxzDecoder::dequantize() {
 				} else {
 					Point3f &n = normalf[i];
 					Point2i ni = *(Point2i *)&n;
-					for(int k = 0; k < 100; k++)
-						n = Normal::decode(ni, (int)norm.q);
+					n = Normal::decode(ni, (int)norm.q);
 				}
 			}
 		} else {
@@ -422,9 +421,10 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 	vector<DEdge2> front;
 	front.reserve(end - start);
 
-	int last_edge = -1;
+        int new_edge = -1; //last edge added which sohuld be the first to be processed, no need to store it in faceorder.
+
 	while(start < end) {
-		if(last_edge == -1 && !faceorder.size() && !delayed.size()) {
+                if(new_edge == -1 && !faceorder.size() && !delayed.size()) {
 
 			Point3i estimated(0, 0, 0);
 			Point2i texestimated(0, 0);
@@ -458,15 +458,15 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 			int current_edge = front.size();
 			for(int k = 0; k < 3; k++) {
 				faceorder.push_back(front.size());
-				front.push_back(DEdge2(index[next_(k)], index[prev_(k)], index[k], current_edge + prev_(k), current_edge + next_(k)));
+                                front.emplace_back(index[next_(k)], index[prev_(k)], index[k], current_edge + prev_(k), current_edge + next_(k));
 			}
 			continue;
 		}
 
 		int f;
-		if(last_edge != -1) {
-			f = last_edge;
-			last_edge = -1;
+                if(new_edge != -1) {
+                        f = new_edge;
+                        new_edge = -1;
 		} else if(faceorder.size()) {
 			f = faceorder.front();
 			faceorder.pop_front();
@@ -475,21 +475,20 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 			delayed.pop_back();
 		}
 		DEdge2 &e = front[f];
-		if(e.deleted) continue;
-		e.deleted = true;
-		int prev = e.prev;
-		int next = e.next;
-		int v0 = e.v0;
-		int v1 = e.v1;
-
-		DEdge2 &previous_edge = front[prev];
-		DEdge2 &next_edge = front[next];
+                if(e.deleted) continue;
+                //e.deleted = true; //each edge is processed once at most.
 
 		int c = clers[cler++];
 		if(c == BOUNDARY) continue;
 
-		int first_edge = front.size();
-		int opposite = -1;
+		int v0 = e.v0;
+		int v1 = e.v1;
+
+		DEdge2 &previous_edge = front[e.prev];
+		DEdge2 &next_edge = front[e.next];
+
+                new_edge = front.size(); //index of the next edge to be added.
+                int opposite = -1;
 
 		if(c == VERTEX) {
 			//parallelogram prediction.
@@ -507,46 +506,45 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 				opposite = decodeVertex(predicted, texpredicted, v1);
 			}
 
-			previous_edge.next = first_edge;
-			next_edge.prev = first_edge + 1;
-			//faceorder.push_front(front.size());
-			last_edge = front.size();
-			front.push_back(DEdge2(v0, opposite, v1, prev, first_edge + 1));
+                        previous_edge.next = new_edge;
+                        next_edge.prev = new_edge + 1;
+
+                        front.emplace_back(v0, opposite, v1, e.prev, new_edge + 1);
 			faceorder.push_back(front.size());
-			front.push_back(DEdge2(opposite, v1, v0, first_edge, next));
+                        front.emplace_back(opposite, v1, v0, new_edge, e.next);
 
 		} else if(c == END) {
 			previous_edge.deleted = true;
 			next_edge.deleted = true;
 			front[previous_edge.prev].next = next_edge.next;
 			front[next_edge.next].prev = previous_edge.prev;
-			opposite = previous_edge.v0;
+                        opposite = previous_edge.v0;
+                        new_edge = -1;
 
 		} else if(c == LEFT) {
 			previous_edge.deleted = true;
-			front[previous_edge.prev].next = first_edge;
-			front[next].prev = first_edge;
+                        front[previous_edge.prev].next = new_edge;
+                        front[e.next].prev = new_edge;
 			opposite = previous_edge.v0;
-			//faceorder.push_front(front.size());
-			last_edge = front.size();
-			front.push_back(DEdge2(opposite, v1, v0, previous_edge.prev, next));
+
+                        front.emplace_back(opposite, v1, v0, previous_edge.prev, e.next);
 
 		} else if(c == RIGHT) {
 			next_edge.deleted = true;
-			front[next_edge.next].prev = first_edge;
-			front[prev].next = first_edge;
+                        front[next_edge.next].prev = new_edge;
+                        front[e.prev].next = new_edge;
 			opposite = next_edge.v1;
-			//faceorder.push_front(front.size());
-			last_edge = front.size();
-			front.push_back(DEdge2(v0, opposite, v1, prev, next_edge.next));
+
+                        front.emplace_back(v0, opposite, v1, e.prev, next_edge.next);
 
 		} else if(c == DELAY) {
 			e.deleted = false;
-			delayed.push_back(f);
+                        delayed.push_back(f);
+                        new_edge = -1;
 			continue;
 		} else {
 			assert(0);
-		}
+                }
 		if(short_index) {
 			faces16[start++] = v1;
 			faces16[start++] = v0;

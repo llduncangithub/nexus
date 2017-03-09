@@ -756,7 +756,7 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 					uv_estimated = uv.values[index];
 
 				faceorder.push_back(front.size());
-				front.push_back(CEdge(current, k, current_edge + prev_(k), current_edge + next_(k)));
+				front.emplace_back(current, k, current_edge + prev_(k), current_edge + next_(k));
 			}
 
 			counting++;
@@ -818,7 +818,7 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 			front[previous_edge.prev].next = first_edge;
 			front[enext].prev = first_edge;
 			faceorder.push_front(front.size());
-			front.push_back(CEdge(opposite_face, k1, previous_edge.prev, enext));
+			front.emplace_back(opposite_face, k1, previous_edge.prev, enext);
 
 		} else if(close_right) {
 			clers.push_back(RIGHT);
@@ -826,7 +826,7 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 			front[next_edge.next].prev = first_edge;
 			front[eprev].next = first_edge;
 			faceorder.push_front(front.size());
-			front.push_back(CEdge(opposite_face, k0, eprev, next_edge.next));
+			front.emplace_back(opposite_face, k0, eprev, next_edge.next);
 
 		} else {
 			int v0 = face.f[k0];
@@ -860,9 +860,9 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 			previous_edge.next = first_edge;
 			next_edge.prev = first_edge + 1;
 			faceorder.push_front(front.size());
-			front.push_back(CEdge(opposite_face, k0, eprev, first_edge+1));
+			front.emplace_back(opposite_face, k0, eprev, first_edge+1);
 			faceorder.push_back(front.size());
-			front.push_back(CEdge(opposite_face, k1, first_edge, enext));
+			front.emplace_back(opposite_face, k1, first_edge, enext);
 		}
 
 		counting++;

@@ -127,9 +127,11 @@ uint32_t BitStream::readUint(int numbits) {
 		buff = *pos++;
 		bits = BITS_PER_WORD;
 	}
-	ret |= buff >> (bits - numbits);
-	buff &= bmask[bits - numbits];
+
 	bits -= numbits;
+	ret |= buff >> (bits);
+	buff &= bmask[bits];
+
 
 	return ret;
 }

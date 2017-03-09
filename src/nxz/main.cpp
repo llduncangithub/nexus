@@ -60,7 +60,6 @@ int main(int argc, char *argv[]) {
 
 	nx::NxzEncoder encoder(nvert, nface, nx::Stream::TUNSTALL);
 	encoder.addCoords((float *)&*coords.begin(), &*index.begin());
-	//TODO: test BORDER e DIFF
 	encoder.addNormals((float *)&*normals.begin(), 10, nx::DIFF);
 	encoder.addColors((unsigned char *)&*colors.begin());
 	encoder.encode();
@@ -100,7 +99,7 @@ int main(int argc, char *argv[]) {
 	QTime time;
 	time.start();
 
-	int iter = 2;
+	int iter = 20;
 	for(int i = 0; i < iter; i++) {
 		nx::NxzDecoder decoder(encoder.stream.size(), encoder.stream.data());
 		decoder.setCoords((float *)&*recoords.begin());
