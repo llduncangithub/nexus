@@ -357,17 +357,6 @@ void NxzDecoder::computeNormals(Point3f *normals, Point3f *estimated) {
 	}
 }
 
-static int next_(int t) {
-	t++;
-	if(t == 3) t = 0;
-	return t;
-}
-static int prev_(int t) {
-	t--;
-	if(t == -1) t = 2;
-	return t;
-}
-
 void NxzDecoder::decodeMesh() {
 	nface = stream.read<int>();
 	groups.resize(stream.read<int>());
@@ -407,13 +396,6 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 	uint16_t *faces16 = ((uint16_t *)face.buffer);
 	uint32_t *faces32 = ((uint32_t *)face.buffer);
 
-	bool hasUv = (flags & UV) != 0;
-
-	Point3i *coords = (Point3i *)coord.buffer;
-	Point2i *uvs = (Point2i *)uv.buffer;
-
-	//unsigned int current = 0; //keep track of connected component start
-
 	//faceorder is used to minimize split occourrence positioning in front and in back the new edges to be processed.
 	deque<int> faceorder;
 	//delayed again minimize split by further delay problematic splits
@@ -421,28 +403,30 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 	vector<DEdge2> front;
 	front.reserve(end - start);
 
-        int new_edge = -1; //last edge added which sohuld be the first to be processed, no need to store it in faceorder.
+	//TODO write down size of front required.
+	//TODO test if recording number of bits needed for splits improves anything.
+	//TODO use vector  + offset in faceorder (and reserve).
+
+	int new_edge = -1; //last edge added which sohuld be the first to be processed, no need to store it in faceorder.
 
 	while(start < end) {
-                if(new_edge == -1 && !faceorder.size() && !delayed.size()) {
+		if(new_edge == -1 && !faceorder.size() && !delayed.size()) {
 
-			Point3i estimated(0, 0, 0);
-			Point2i texestimated(0, 0);
 			int last_index = -1;
 			int index[3];
-			int split =  0;
+
+			int split =  0; //bitmask for vertex already decoded/
 			if(clers[cler] == SPLIT) {
 				cler++;
 				split = bitstream.readUint(3);
 			}
 
 			for(int k = 0; k < 3; k++) {
-				//TODO!Non manifold problem
 				int v;
 				if(split & (1<<k))
 					v = bitstream.readUint(32);
 				else
-					v = decodeVertex(estimated, texestimated, last_index);
+					v = decodeVertex(last_index, last_index, last_index);
 
 				index[k] = v;
 				if(short_index)
@@ -450,23 +434,22 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 				else
 					faces32[start++] = v;
 
-				estimated = coords[v];
-				if(hasUv)
-					texestimated = uvs[v];
 				last_index = v;
 			}
 			int current_edge = front.size();
-			for(int k = 0; k < 3; k++) {
-				faceorder.push_back(front.size());
-                                front.emplace_back(index[next_(k)], index[prev_(k)], index[k], current_edge + prev_(k), current_edge + next_(k));
-			}
+			faceorder.push_back(front.size());
+			front.emplace_back(index[1], index[2], index[0], current_edge + 2, current_edge + 1);
+			faceorder.push_back(front.size());
+			front.emplace_back(index[2], index[0], index[1], current_edge + 0, current_edge + 2);
+			faceorder.push_back(front.size());
+			front.emplace_back(index[0], index[1], index[2], current_edge + 1, current_edge + 0);
 			continue;
 		}
 
 		int f;
-                if(new_edge != -1) {
-                        f = new_edge;
-                        new_edge = -1;
+		if(new_edge != -1) {
+			f = new_edge;
+			new_edge = -1;
 		} else if(faceorder.size()) {
 			f = faceorder.front();
 			faceorder.pop_front();
@@ -475,8 +458,8 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 			delayed.pop_back();
 		}
 		DEdge2 &e = front[f];
-                if(e.deleted) continue;
-                //e.deleted = true; //each edge is processed once at most.
+		if(e.deleted) continue;
+		//e.deleted = true; //each edge is processed once at most.
 
 		int c = clers[cler++];
 		if(c == BOUNDARY) continue;
@@ -487,64 +470,59 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 		DEdge2 &previous_edge = front[e.prev];
 		DEdge2 &next_edge = front[e.next];
 
-                new_edge = front.size(); //index of the next edge to be added.
-                int opposite = -1;
+		new_edge = front.size(); //index of the next edge to be added.
+		int opposite = -1;
 
 		if(c == VERTEX) {
-			//parallelogram prediction.
-			if(clers[cler] == SPLIT) {
+			if(clers[cler] == SPLIT) { //lookahead
 				cler++;
 				opposite = bitstream.readUint(32);
 			} else {
-				int v2 = e.v2;
-				Point3i predicted = coords[v0] + coords[v1] - coords[v2];
-				Point2i texpredicted(0, 0);
-				if(hasUv)
-					texpredicted = uvs[v0] + uvs[v1] - uvs[v2];
-
-				//not v0!, in encode we use face, here edge which is inverted
-				opposite = decodeVertex(predicted, texpredicted, v1);
+				//Edge is inverted respect to encoding hence v1-v0 inverted.
+				opposite = decodeVertex(v1, v0, e.v2);
 			}
 
-                        previous_edge.next = new_edge;
-                        next_edge.prev = new_edge + 1;
+			previous_edge.next = new_edge;
+			next_edge.prev = new_edge + 1;
 
-                        front.emplace_back(v0, opposite, v1, e.prev, new_edge + 1);
+			front.emplace_back(v0, opposite, v1, e.prev, new_edge + 1);
 			faceorder.push_back(front.size());
-                        front.emplace_back(opposite, v1, v0, new_edge, e.next);
+			front.emplace_back(opposite, v1, v0, new_edge, e.next);
+
+		} else if(c == LEFT) {
+			previous_edge.deleted = true;
+			front[previous_edge.prev].next = new_edge;
+			front[e.next].prev = new_edge;
+			opposite = previous_edge.v0;
+
+			front.emplace_back(opposite, v1, v0, previous_edge.prev, e.next);
+
+		} else if(c == RIGHT) {
+			next_edge.deleted = true;
+			front[next_edge.next].prev = new_edge;
+			front[e.prev].next = new_edge;
+			opposite = next_edge.v1;
+
+			front.emplace_back(v0, opposite, v1, e.prev, next_edge.next);
+
+		} else if(c == DELAY) {
+			e.deleted = false;
+			delayed.push_back(f);
+			new_edge = -1;
+			continue;
 
 		} else if(c == END) {
 			previous_edge.deleted = true;
 			next_edge.deleted = true;
 			front[previous_edge.prev].next = next_edge.next;
 			front[next_edge.next].prev = previous_edge.prev;
-                        opposite = previous_edge.v0;
-                        new_edge = -1;
-
-		} else if(c == LEFT) {
-			previous_edge.deleted = true;
-                        front[previous_edge.prev].next = new_edge;
-                        front[e.next].prev = new_edge;
 			opposite = previous_edge.v0;
+			new_edge = -1;
 
-                        front.emplace_back(opposite, v1, v0, previous_edge.prev, e.next);
-
-		} else if(c == RIGHT) {
-			next_edge.deleted = true;
-                        front[next_edge.next].prev = new_edge;
-                        front[e.prev].next = new_edge;
-			opposite = next_edge.v1;
-
-                        front.emplace_back(v0, opposite, v1, e.prev, next_edge.next);
-
-		} else if(c == DELAY) {
-			e.deleted = false;
-                        delayed.push_back(f);
-                        new_edge = -1;
-			continue;
 		} else {
 			assert(0);
-                }
+		}
+
 		if(short_index) {
 			faces16[start++] = v1;
 			faces16[start++] = v0;
@@ -557,27 +535,27 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 	}
 }
 
-int NxzDecoder::decodeVertex(const Point3i &predicted, const Point2i &texpredicted, int last_index) {
+int NxzDecoder::decodeVertex(int v0, int v1, int v2) {
 
 	uint32_t v = vertex_count++;
 	assert(v < nvert);
 
-	Point3i &p = ((Point3i *)coord.buffer)[v];
-	p += predicted;
+	if(v0 == -1) //first vertex of component. nothing to do.
+		return v;
+
+	Point3i *coords = (Point3i *)coord.buffer;
+	coords[v] += coords[v0] + coords[v1] - coords[v2];
 
 	if(flags & UV) {
-		Point2i &u = (((Point2i *)&uv.buffer)[v]);
-		u += texpredicted;
+		Point2i *uvs = (Point2i *)uv.buffer;
+		uvs[v] += uvs[v0] + uvs[v1] - uvs[v2];
 	}
-
-	if(last_index < 0)
-		return v;
 
 	if(flags & NORMAL) {
 		if(normals_prediction == DIFF) {
 			if(short_normals) {
 				Point3s &n = ((Point3s *)norm.buffer)[v];
-				Point3s &ref = ((Point3s *)norm.buffer)[last_index];
+				Point3s &ref = ((Point3s *)norm.buffer)[v0];
 				n[0] += ref[0];
 				n[1] += ref[1];
 				if(n[0] < -norm.q)      n[0] += 2*norm.q;
@@ -587,7 +565,7 @@ int NxzDecoder::decodeVertex(const Point3i &predicted, const Point2i &texpredict
 
 			} else {
 				Point3i &n = ((Point3i *)norm.buffer)[v];
-				Point3i &ref = ((Point3i *)norm.buffer)[last_index];
+				Point3i &ref = ((Point3i *)norm.buffer)[v0];
 				n[0] += ref[0];
 				n[1] += ref[1];
 				if(n[0] < -norm.q)      n[0] += 2*norm.q;
@@ -599,12 +577,12 @@ int NxzDecoder::decodeVertex(const Point3i &predicted, const Point2i &texpredict
 	}
 	if(flags & COLOR && color[0].buffer) {
 		Color4b &c = ((Color4b *)color[0].buffer)[v];
-		c += ((Color4b *)color[0].buffer)[last_index];
+		c += ((Color4b *)color[0].buffer)[v0];
 	}
 
 	for(auto &da: data) {
 		int &d = ((int *)da.buffer)[v];
-		d += ((int *)da.buffer)[last_index];
+		d += ((int *)da.buffer)[v0];
 	}
 
 	return v;

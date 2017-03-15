@@ -93,7 +93,9 @@ private:
 
 
 	//we assume integer computations and float computations are equivalent for numbers < 1<<23 ? we shouldnt
-	int decodeVertex(const Point3i &predicted, const Point2i &texpredicted, int last_index);
+//	int decodeVertex(const Point3i &predicted, const Point2i &texpredicted, int last_index);
+	int decodeVertex(int v0, int v1, int v2);
+
 
 	int decodeDiff(uchar diff, BitStream &stream);
 	void decodeDiff(uchar diff, BitStream &stream, Point3i &p);
