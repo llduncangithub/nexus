@@ -82,12 +82,11 @@ void NxzEncoder::addCoords(float *buffer, float q, Point3f o) {
 
 	coord.q = q;
 
-	//	Point3i cmax(-2147483647);
 	for(uint32_t i = 0; i < nvert; i++) {
 		Point3i &q = coord.values[i];
 		Point3f &p = coords[i];
 		for(int k = 0; k < 3; k++)
-			q[k] = floor((p[k] - o[k] + coord.q/2.0f)/coord.q);
+			q[k] = floor((p[k] - o[k])/coord.q);
 	}
 	setCoordBits();
 }
@@ -748,7 +747,8 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 				if(split & (1<<k))
 					bitstream.writeUint(encoded[index], 32);
 				else
-					encodeVertex(index, coord_estimated, uv_estimated, last_index);
+					encodeVertex(index, last_index, last_index, last_index);
+//					encodeVertex(index, coord_estimated, uv_estimated, last_index);
 
 				last_index = index;
 				coord_estimated = coord.values[index];
@@ -849,12 +849,13 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 				//we need to estimate opposite direction using v0 + v1 -
 				int v2 = faces[e.face].f[e.side];
 
-				Point3i coord_predicted = coord.values[v0] + coord.values[v1] - coord.values[v2];
+/*				Point3i coord_predicted = coord.values[v0] + coord.values[v1] - coord.values[v2];
 				Point2i uv_predicted(0, 0);
 				if(flags & UV)
-					uv_predicted = uv.values[v0] + uv.values[v1] - uv.values[v2];
+					uv_predicted = uv.values[v0] + uv.values[v1] - uv.values[v2]; */
 
-				encodeVertex(opposite, coord_predicted, uv_predicted, v0);
+				encodeVertex(opposite, v0, v1, v2);
+				//encodeVertex(opposite, coord_predicted, uv_predicted, v0);
 			}
 
 			previous_edge.next = first_edge;
@@ -872,12 +873,15 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 	}
 }
 
-bool NxzEncoder::encodeVertex(int target, const Point3i &predicted, const Point2i &texpredicted, int last) {
+bool NxzEncoder::encodeVertex(int target, int v0, int v1, int v2) {
+//bool NxzEncoder::encodeVertex(int target, const Point3i &predicted, const Point2i &texpredicted, int last) {
 
 	assert(encoded[target] == -1);
 
 	//notice how vertex needs to be reordered
-	coord.diffs[current_vertex] = coord.values[target] - predicted;
+	coord.diffs[current_vertex] = coord.values[target];
+	if(v0 >= 0)
+		coord.diffs[current_vertex] -= (coord.values[v0] + coord.values[v1] - coord.values[v2]);
 
 	if((flags & NORMAL)) {
 		Point2i &dt = norm.diffs[current_vertex];
@@ -886,8 +890,8 @@ bool NxzEncoder::encodeVertex(int target, const Point3i &predicted, const Point2
 		assert(abs(dt[0]) < (1<<25));
 		assert(abs(dt[1]) < (1<<25));
 
-		if(normals_prediction == DIFF && last >= 0) {
-			dt -= norm.values[last];
+		if(normals_prediction == DIFF && v0 >= 0) {
+			dt -= norm.values[v0];
 			if(dt[0] < -norm.q)      dt[0] += 2*norm.q;
 			else if(dt[0] > +norm.q) dt[0] -= 2*norm.q;
 			if(dt[1] < -norm.q)      dt[1] += 2*norm.q;
@@ -897,14 +901,17 @@ bool NxzEncoder::encodeVertex(int target, const Point3i &predicted, const Point2
 
 	if(flags & COLOR) {
 		for(int k = 0; k < 4; k++)
-			color[k].diffs[current_vertex] = color[k].values[target] - ((last < 0)? 0: color[k].values[last]);
+			color[k].diffs[current_vertex] = color[k].values[target] - ((v0 < 0)? 0: color[k].values[v0]);
 	}
 
-	if(flags & UV)
-		uv.diffs[current_vertex] = uv.values[target] - texpredicted; //this is the estimated point
+	if(flags & UV) {
+		uv.diffs[current_vertex] = uv.values[target];
+		if(v0 >= 0)
+			uv.diffs[current_vertex] -= (uv.values[v0] + uv.values[v1] - uv.values[v2]);
+	}
 
 	for(auto &da: data)
-		da.diffs[current_vertex] = da.values[target] - (last < 0)? 0: da.values[last];
+		da.diffs[current_vertex] = da.values[target] - (v0 < 0)? 0: da.values[v0];
 
 	encoded[target] = current_vertex++;
 	return false;

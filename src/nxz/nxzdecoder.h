@@ -61,6 +61,9 @@ public:
 	void setIndex(uint32_t *buffer);
 	void setIndex(int16_t *buffer);
 
+/*	template <class T> void setAttribute(int n, T *buffer);
+	template <class T> void setAttribute(int n, Attribute *a, T *buffer); */
+
 	void decode();
 
 private:

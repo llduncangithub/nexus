@@ -2,6 +2,7 @@
 #define NXZ_H
 
 #include <vector>
+#include "point.h"
 #include "cstream.h"
 
 namespace nx {
@@ -14,8 +15,8 @@ enum Normals { DIFF = 0,      //do not estimate normals, use diffs to previous
 
 
 template <typename S> struct Attribute {
-	float q; //quantization
-	S o;     //origin
+	float q;       //quantization
+	S o;           //origin
 	uint32_t size; //for stats
 	std::vector<S> values;
 	std::vector<S> diffs;
@@ -23,6 +24,8 @@ template <typename S> struct Attribute {
 	Attribute(): q(0.0f), buffer(nullptr) {}
 	Attribute(float _q, S _o): q(_q), o(_o), size(0), buffer(nullptr) {}
 };
+
+
 
 /*
 //in -> internal representation Point3i, OUT external representation (Point3f)
@@ -33,8 +36,8 @@ template <typename IN, typename OUT> struct Attribute1 {
 	OUT *buffer;
 	bool predicted;
 
-	std::vector<S> values;
-	std::vector<S> diffs;
+	std::vector<IN> values;
+	std::vector<IN> diffs;
 
 	Attribute1(): q(0.0f), buffer(nullptr) {}
 	Attribute1(float _q, S _o, bool _predicted = false): q(_q), o(_o), size(0), buffer(nullptr), predicted(_predicted) {}
@@ -49,17 +52,20 @@ template <typename IN, typename OUT> struct Attribute1 {
 
 		Tunstall::compress(stream, &*diffs.begin(), diffs.size());
 		stream.write(bitstream);
-		uv.size = stream.elapsed();
+		size = stream.elapsed();
 	}
 
 	virtual void diff(int diffindex, int valueindex, int lastindex) {
 		diffs[diffindex] = values[valueindex];
-		if(last != -1)
-			diffs[diffindex] -= diffs[lastindex;]
+		if(last != -1) {
+			if(predicted)
+				diffs[diffindex] = values[valueindex] - (values[v0] + values[v1] - values[v2]);
+			else
+				diffs[diffindex] -= diffs[lastindex];
+		}
 	}
-	virtual void diff(int diffindex, int valueindex, int v0, int v1, int v2) {
-		diffs[diffindex] = values[valueindex] - (values[v0] + values[v1] - values[v2]);
-	}
+
+
 };
 
 class ColordAttribute: public Attribute<Point3i> {
