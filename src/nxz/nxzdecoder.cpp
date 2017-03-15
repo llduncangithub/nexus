@@ -422,11 +422,11 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 	while(start < end) {
 		if(new_edge == -1 && !faceorder.size() && !delayed.size()) {
 
-			int last_index = -1;
+			int last_index = vertex_count-1;
 			int index[3];
 
 			int split =  0; //bitmask for vertex already decoded/
-			if(clers[cler] == SPLIT) {
+			if(clers[cler] == SPLIT) { //lookahead
 				cler++;
 				split = bitstream.readUint(3);
 			}

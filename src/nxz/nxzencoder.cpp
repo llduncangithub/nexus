@@ -731,7 +731,7 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 			McFace &face = faces[current];
 			Point3i coord_estimated(0, 0, 0);
 			Point2i uv_estimated(0, 0);
-			int last_index = -1;
+			int last_index = current_vertex -1;
 			int split = 0;
 			for(int k = 0; k < 3; k++) {
 				int index = face.f[k];
