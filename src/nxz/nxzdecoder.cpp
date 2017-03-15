@@ -391,21 +391,31 @@ void NxzDecoder::decodeMesh() {
 	dequantize();
 }
 
+static int ilog2(uint64_t p) {
+	int k = 0;
+	while ( p>>=1 ) { ++k; }
+	return k;
+}
+
 void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitStream &bitstream) {
 
 	uint16_t *faces16 = ((uint16_t *)face.buffer);
 	uint32_t *faces32 = ((uint32_t *)face.buffer);
 
+	//edges of the mesh to be processed
+	vector<DEdge2> front;
+	front.reserve((end - start)*3);
+
 	//faceorder is used to minimize split occourrence positioning in front and in back the new edges to be processed.
-	deque<int> faceorder;
+	vector<int>faceorder;
+	faceorder.reserve((end - start)/2);
+	uint32_t order = 0;
+
 	//delayed again minimize split by further delay problematic splits
 	vector<int> delayed;
-	vector<DEdge2> front;
-	front.reserve(end - start);
 
-	//TODO write down size of front required.
-	//TODO test if recording number of bits needed for splits improves anything.
-	//TODO use vector  + offset in faceorder (and reserve).
+	//TODO test if recording number of bits needed for splits improves anything. (very small but cost is zero.
+	int splitbits = ilog2(nvert) + 1;
 
 	int new_edge = -1; //last edge added which sohuld be the first to be processed, no need to store it in faceorder.
 
@@ -424,7 +434,7 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 			for(int k = 0; k < 3; k++) {
 				int v;
 				if(split & (1<<k))
-					v = bitstream.readUint(32);
+					v = bitstream.readUint(splitbits);
 				else
 					v = decodeVertex(last_index, last_index, last_index);
 
@@ -450,12 +460,11 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 		if(new_edge != -1) {
 			f = new_edge;
 			new_edge = -1;
-		} else if(faceorder.size()) {
-			f = faceorder.front();
-			faceorder.pop_front();
+		} else if(order < faceorder.size()) {
+			f = faceorder[order++];
 		} else {
 			f = delayed.back();
-			delayed.pop_back();
+			delayed.pop_back(); //or popfront?
 		}
 		DEdge2 &e = front[f];
 		if(e.deleted) continue;
@@ -476,7 +485,7 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 		if(c == VERTEX) {
 			if(clers[cler] == SPLIT) { //lookahead
 				cler++;
-				opposite = bitstream.readUint(32);
+				opposite = bitstream.readUint(splitbits);
 			} else {
 				//Edge is inverted respect to encoding hence v1-v0 inverted.
 				opposite = decodeVertex(v1, v0, e.v2);
@@ -556,6 +565,7 @@ int NxzDecoder::decodeVertex(int v0, int v1, int v2) {
 			if(short_normals) {
 				Point3s &n = ((Point3s *)norm.buffer)[v];
 				Point3s &ref = ((Point3s *)norm.buffer)[v0];
+				//TODO slightly faster to avoid +=.
 				n[0] += ref[0];
 				n[1] += ref[1];
 				if(n[0] < -norm.q)      n[0] += 2*norm.q;
@@ -596,31 +606,21 @@ int NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream) {
 		return 0;
 
 	int val = bitstream.readUint(diff);
-	int middle = (1<<diff)>>1;
+	int middle = 1<<(diff-1);
 	if(val < middle)
 		val = -val -middle;
 	return val;
 }
 
-
 void NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream, Point3i &p) {
-	//assert(diff < 22);
 	if(diff == 0) {
 		p[0] = p[1] = p[2] = 0;
 		return;
 	}
-	//int mask = (1<<diff)-1;
-	int max = (1<<(diff-1));
+	int max = 1<<(diff-1);
 	p[0] = bitstream.readUint(diff) - max;
 	p[1] = bitstream.readUint(diff) - max;
 	p[2] = bitstream.readUint(diff) - max;
-	//TODO is this really faster than just do multiple readings?
-
-	/*	bitstream.read(diff*3, bits);
-	for(int k = 2; k >= 0; k--) {
-		p[k] = (bits & mask) - max;
-		bits >>= diff;
-	} */
 }
 
 void NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream, Point3s &p) {
@@ -631,21 +631,11 @@ void NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream, Point3s &p) {
 		return;
 	}
 
-	//int mask = (1<<diff)-1;
-	int max = (1<<(diff-1));
+	int max = 1<<(diff-1);
 	p[0] = bitstream.readUint(diff) - max;
 	p[1] = bitstream.readUint(diff) - max;
 	p[2] = bitstream.readUint(diff) - max;
-	//TODO is this really faster than just do multiple readings?
-
-	/*	bitstream.read(diff*3, bits);
-	for(int k = 2; k >= 0; k--) {
-		p[k] = (bits & mask) - max;
-		bits >>= diff;
-	} */
 }
-
-
 
 void NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream, Point2i &p) {
 	//assert(diff < 22);
@@ -654,17 +644,9 @@ void NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream, Point2i &p) {
 		return;
 	}
 
-	//int mask = (1<<diff)-1;
-	int max = (1<<(diff-1));
+	int max = 1<<(diff-1);
 	p[0] = bitstream.readUint(diff) - max;
 	p[1] = bitstream.readUint(diff) - max;
-	//TODO is this really faster than just do multiple readings?
-
-	/*	bitstream.read(diff*3, bits);
-	for(int k = 2; k >= 0; k--) {
-		p[k] = (bits & mask) - max;
-		bits >>= diff;
-	} */
 }
 
 void NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream, Point2s &p) {
@@ -675,15 +657,7 @@ void NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream, Point2s &p) {
 		return;
 	}
 
-	//int mask = (1<<diff)-1;
-	int max = (1<<(diff-1));
+	int max = 1<<(diff-1);
 	p[0] = bitstream.readUint(diff) - max;
 	p[1] = bitstream.readUint(diff) - max;
-	//TODO is this really faster than just do multiple readings?
-
-	/*	bitstream.read(diff*3, bits);
-	for(int k = 2; k >= 0; k--) {
-		p[k] = (bits & mask) - max;
-		bits >>= diff;
-	} */
 }

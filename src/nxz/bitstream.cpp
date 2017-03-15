@@ -132,7 +132,6 @@ uint32_t BitStream::readUint(int numbits) {
 	ret |= buff >> (bits);
 	buff &= bmask[bits];
 
-
 	return ret;
 }
 

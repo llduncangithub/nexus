@@ -706,11 +706,14 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 	unsigned int current = 0;          //keep track of connected component start
 
 	vector<int> delayed;
+	//TODO move to vector + order
 	deque<int> faceorder;
 	vector<CEdge> front;
 
 	vector<bool> visited(faces.size(), false);
 	unsigned int totfaces = faces.size();
+
+	int splitbits = ilog2(nvert) + 1;
 
 	//	vector<int> test_faces;
 	int counting = 0;
@@ -745,7 +748,7 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 				int index = face.f[k];
 
 				if(split & (1<<k))
-					bitstream.writeUint(encoded[index], 32);
+					bitstream.writeUint(encoded[index], splitbits);
 				else
 					encodeVertex(index, last_index, last_index, last_index);
 //					encodeVertex(index, coord_estimated, uv_estimated, last_index);
@@ -842,20 +845,12 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 			clers.push_back(VERTEX);
 			if(encoded[opposite] != -1) {
 				clers.push_back(SPLIT);
-				bitstream.writeUint(encoded[opposite], 32);
+				bitstream.writeUint(encoded[opposite], splitbits);
 
 			} else {
-				//compute how much would it take to save vertex information:
-				//we need to estimate opposite direction using v0 + v1 -
+				//vertex needed for parallelogram prediction
 				int v2 = faces[e.face].f[e.side];
-
-/*				Point3i coord_predicted = coord.values[v0] + coord.values[v1] - coord.values[v2];
-				Point2i uv_predicted(0, 0);
-				if(flags & UV)
-					uv_predicted = uv.values[v0] + uv.values[v1] - uv.values[v2]; */
-
 				encodeVertex(opposite, v0, v1, v2);
-				//encodeVertex(opposite, coord_predicted, uv_predicted, v0);
 			}
 
 			previous_edge.next = first_edge;
