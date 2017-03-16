@@ -381,12 +381,69 @@ void NxzDecoder::decodeMesh() {
 
 	decodeDatas();
 
+	prediction.reserve(nvert*3);
+
 	uint32_t start = 0;
 	uint32_t cler = 0; //keeps track of current cler
 	for(uint32_t &end: groups) {
 		decodeFaces(start*3, end*3, cler, bitstream);
 		start = end;
 	}
+
+
+	Point3i *coords = (Point3i *)coord.buffer;
+	for(uint32_t i = 1, j = 3; i < nvert; i++, j+=3) {
+		coords[i] += coords[prediction[j]] + coords[prediction[j+1]] - coords[prediction[j+2]];
+	}
+	//coords[v] += coords[v0] + coords[v1] - coords[v2];
+
+	if(flags & UV) {
+		Point2i *uvs = (Point2i *)uv.buffer;
+		for(uint32_t i = 1, j = 3; i < nvert; i++, j+=3) {
+			uvs[i] += uvs[prediction[j]] + uvs[prediction[j+1]] - uvs[prediction[j+2]];
+		}
+	}
+
+	if(flags & NORMAL) {
+		for(uint32_t i = 1, j = 3; i < nvert; i++, j += 3) {
+			if(normals_prediction == DIFF) {
+				if(short_normals) {
+					Point3s &n = ((Point3s *)norm.buffer)[i];
+					Point3s &ref = ((Point3s *)norm.buffer)[prediction[j]];
+					//TODO slightly faster to avoid +=.
+					n[0] += ref[0];
+					n[1] += ref[1];
+					if(n[0] < -norm.q)      n[0] += 2*norm.q;
+					else if(n[0] > +norm.q) n[0] -= 2*norm.q;
+					if(n[1] < -norm.q)      n[1] += 2*norm.q;
+					else if(n[1] > +norm.q) n[1] -= 2*norm.q;
+
+				} else {
+					Point3i &n = ((Point3i *)norm.buffer)[i];
+					Point3i &ref = ((Point3i *)norm.buffer)[prediction[j]];
+					n[0] += ref[0];
+					n[1] += ref[1];
+					if(n[0] < -norm.q)      n[0] += 2*norm.q;
+					else if(n[0] > +norm.q) n[0] -= 2*norm.q;
+					if(n[1] < -norm.q)      n[1] += 2*norm.q;
+					else if(n[1] > +norm.q) n[1] -= 2*norm.q;
+				}
+			}
+		}
+	}
+	if(flags & COLOR && color[0].buffer) {
+		for(uint32_t i = 1, j = 3; i < nvert; i++) {
+			Color4b &c = ((Color4b *)color[0].buffer)[i];
+			c += ((Color4b *)color[0].buffer)[prediction[j]];
+		}
+	}
+/*
+	for(auto &da: data) {
+		int &d = ((int *)da.buffer)[v];
+		d += ((int *)da.buffer)[v0];
+	} */
+
+
 
 	dequantize();
 }
@@ -435,9 +492,13 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 				int v;
 				if(split & (1<<k))
 					v = bitstream.readUint(splitbits);
-				else
-					v = decodeVertex(last_index, last_index, last_index);
-
+				else {
+					prediction.push_back(last_index);
+					prediction.push_back(last_index);
+					prediction.push_back(last_index);
+					v = vertex_count++;
+//					v = decodeVertex(last_index, last_index, last_index);
+				}
 				index[k] = v;
 				if(short_index)
 					faces16[start++] = v;
@@ -488,7 +549,11 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 				opposite = bitstream.readUint(splitbits);
 			} else {
 				//Edge is inverted respect to encoding hence v1-v0 inverted.
-				opposite = decodeVertex(v1, v0, e.v2);
+				prediction.push_back(v1);
+				prediction.push_back(v0);
+				prediction.push_back(e.v2);
+				opposite = vertex_count++;
+				//opposite = decodeVertex(v1, v0, e.v2);
 			}
 
 			previous_edge.next = new_edge;

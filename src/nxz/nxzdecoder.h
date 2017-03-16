@@ -72,6 +72,7 @@ private:
 	std::vector<bool> boundary;
 	std::vector<uint32_t> groups;
 	std::vector<uchar> clers;
+	std::vector<int> prediction;
 
 	int vertex_count; //keep tracks of current decoding vertex
 
