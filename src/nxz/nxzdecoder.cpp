@@ -381,7 +381,7 @@ void NxzDecoder::decodeMesh() {
 
 	decodeDatas();
 
-	prediction.reserve(nvert*3);
+	prediction.resize(nvert);
 
 	uint32_t start = 0;
 	uint32_t cler = 0; //keeps track of current cler
@@ -390,26 +390,27 @@ void NxzDecoder::decodeMesh() {
 		start = end;
 	}
 
-
 	Point3i *coords = (Point3i *)coord.buffer;
-	for(uint32_t i = 1, j = 3; i < nvert; i++, j+=3) {
-		coords[i] += coords[prediction[j]] + coords[prediction[j+1]] - coords[prediction[j+2]];
+	for(uint32_t i = 1; i < nvert; i++) {
+		Face &f = prediction[i];
+		coords[i] += coords[f.a] + coords[f.b] - coords[f.c];
 	}
-	//coords[v] += coords[v0] + coords[v1] - coords[v2];
 
 	if(flags & UV) {
 		Point2i *uvs = (Point2i *)uv.buffer;
-		for(uint32_t i = 1, j = 3; i < nvert; i++, j+=3) {
-			uvs[i] += uvs[prediction[j]] + uvs[prediction[j+1]] - uvs[prediction[j+2]];
+		for(uint32_t i = 1; i < nvert; i++) {
+			Face &f = prediction[i];
+			uvs[i] += uvs[f.a] + uvs[f.b] - uvs[f.c];
 		}
 	}
 
 	if(flags & NORMAL) {
-		for(uint32_t i = 1, j = 3; i < nvert; i++, j += 3) {
+		for(uint32_t i = 1; i < nvert; i++) {
 			if(normals_prediction == DIFF) {
+				Face &f = prediction[i];
 				if(short_normals) {
 					Point3s &n = ((Point3s *)norm.buffer)[i];
-					Point3s &ref = ((Point3s *)norm.buffer)[prediction[j]];
+					Point3s &ref = ((Point3s *)norm.buffer)[f.a];
 					//TODO slightly faster to avoid +=.
 					n[0] += ref[0];
 					n[1] += ref[1];
@@ -420,7 +421,7 @@ void NxzDecoder::decodeMesh() {
 
 				} else {
 					Point3i &n = ((Point3i *)norm.buffer)[i];
-					Point3i &ref = ((Point3i *)norm.buffer)[prediction[j]];
+					Point3i &ref = ((Point3i *)norm.buffer)[f.a];
 					n[0] += ref[0];
 					n[1] += ref[1];
 					if(n[0] < -norm.q)      n[0] += 2*norm.q;
@@ -432,18 +433,21 @@ void NxzDecoder::decodeMesh() {
 		}
 	}
 	if(flags & COLOR && color[0].buffer) {
-		for(uint32_t i = 1, j = 3; i < nvert; i++) {
+		for(uint32_t i = 1; i < nvert; i++) {
+			Face &f = prediction[i];
 			Color4b &c = ((Color4b *)color[0].buffer)[i];
-			c += ((Color4b *)color[0].buffer)[prediction[j]];
+			c += ((Color4b *)color[0].buffer)[f.a];
 		}
 	}
-/*
+
 	for(auto &da: data) {
-		int &d = ((int *)da.buffer)[v];
-		d += ((int *)da.buffer)[v0];
-	} */
-
-
+		int *buffer =((int *)da.buffer);
+		if(!buffer) continue;
+		for(uint32_t i = 1; i < nvert; i++) {
+			Face &f = prediction[i];
+			buffer[i] += buffer[f.a];
+		}
+	}
 
 	dequantize();
 }
@@ -493,9 +497,7 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 				if(split & (1<<k))
 					v = bitstream.readUint(splitbits);
 				else {
-					prediction.push_back(last_index);
-					prediction.push_back(last_index);
-					prediction.push_back(last_index);
+					prediction[vertex_count] = Face(last_index, last_index, last_index);
 					v = vertex_count++;
 //					v = decodeVertex(last_index, last_index, last_index);
 				}
@@ -549,9 +551,7 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 				opposite = bitstream.readUint(splitbits);
 			} else {
 				//Edge is inverted respect to encoding hence v1-v0 inverted.
-				prediction.push_back(v1);
-				prediction.push_back(v0);
-				prediction.push_back(e.v2);
+				prediction[vertex_count] = Face(v1, v0, e.v2);
 				opposite = vertex_count++;
 				//opposite = decodeVertex(v1, v0, e.v2);
 			}
