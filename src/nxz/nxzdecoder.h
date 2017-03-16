@@ -73,12 +73,6 @@ private:
 	std::vector<uint32_t> groups;
 	std::vector<uchar> clers;
 
-	struct Face {
-		uint32_t a, b, c;
-		Face() {}
-		Face(uint32_t v0, uint32_t v1, uint32_t v2): a(v0), b(v1), c(v2) {}
-	};
-
 	std::vector<Face> prediction;
 
 	int vertex_count; //keep tracks of current decoding vertex

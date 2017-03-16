@@ -86,7 +86,7 @@ void NxzEncoder::addCoords(float *buffer, float q, Point3f o) {
 		Point3i &q = coord.values[i];
 		Point3f &p = coords[i];
 		for(int k = 0; k < 3; k++)
-			q[k] = floor((p[k] - o[k])/coord.q);
+			q[k] = floor(p[k]/coord.q);
 	}
 	setCoordBits();
 }
@@ -146,8 +146,7 @@ void NxzEncoder::setCoordBits() {
 	if(1) {
 		Point3i cmax(-2147483647);
 		for(auto &q: coord.values) {
-			q -= coord.o;
-			cmax.setMax(q);
+			cmax.setMax(q - coord.o);
 		}
 
 		int bits = 1+std::max(std::max(ilog2(cmax[0]), ilog2(cmax[1])), ilog2(cmax[2]));
@@ -229,8 +228,7 @@ void NxzEncoder::addUV(float *buffer, float q) {
 	if(1) {
 		Point2i cmax(-2147483647);
 		for(auto &q: uv.values) {
-			q -= uv.o;
-			cmax.setMax(q);
+			cmax.setMax(q -uv.o);
 		}
 		int bits = 1 + std::max(ilog2(cmax[0]), ilog2(cmax[1]));
 		cout << "Texture cooridnates quantization in " << bits << " bits\n";
@@ -510,12 +508,76 @@ void NxzEncoder::encodeMesh() {
 	}
 
 	BitStream bitstream;
+	prediction.resize(nvert);
 
 	start =  0;
 	for(uint32_t &end: groups) {
 		encodeFaces(start, end, bitstream);
 		start = end;
 	}
+
+	coord.diffs[0] = coord.values[prediction[0].t];
+	for(uint32_t i = 1; i < nvert; i++) {
+		Quad &q = prediction[i];
+		coord.diffs[i] = coord.values[q.t] - (coord.values[q.a] + coord.values[q.b] - coord.values[q.c]);
+	}
+
+	if((flags & NORMAL)) {
+		norm.diffs[0] = norm.values[prediction[0].t];
+		for(uint32_t i = 1; i < nvert; i++) {
+			Quad &q = prediction[i];
+
+			Point2i &dt = norm.diffs[i];
+			dt = norm.values[q.t];
+
+			if(normals_prediction == DIFF) {
+				dt -= norm.values[q.a];
+				if(dt[0] < -norm.q)      dt[0] += 2*norm.q;
+				else if(dt[0] > +norm.q) dt[0] -= 2*norm.q;
+				if(dt[1] < -norm.q)      dt[1] += 2*norm.q;
+				else if(dt[1] > +norm.q) dt[1] -= 2*norm.q;
+			}
+		}
+	}
+
+	if(flags & COLOR) {
+		for(int k = 0; k < 4; k++)
+			color[k].diffs[0] = color[k].values[prediction[0].t];
+		for(uint32_t i = 1; i < nvert; i++) {
+			Quad &q = prediction[i];
+			for(int k = 0; k < 4; k++)
+				color[k].diffs[i] = color[k].values[q.t] - color[k].values[q.a];
+		}
+	}
+
+	if(flags & UV) {
+		uv.diffs[0] = uv.values[prediction[0].t];
+		for(uint32_t i = 1; i < nvert; i++) {
+			Quad &q = prediction[i];
+			uv.diffs[i] = uv.values[q.t] - (uv.values[q.a] + uv.values[q.b] - uv.values[q.c]);
+		}
+	}
+
+	for(auto &da: data) {
+		da.diffs[0] = da.values[prediction[0].t];
+		for(uint32_t i = 1; i < nvert; i++) {
+			Quad &q = prediction[i];
+			da.diffs[i] = da.values[q.t] - da.values[q.a];
+		}
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 	stream.compress(clers.size(), &*clers.begin());
 	face.size = stream.elapsed();
@@ -749,9 +811,11 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 
 				if(split & (1<<k))
 					bitstream.writeUint(encoded[index], splitbits);
-				else
-					encodeVertex(index, last_index, last_index, last_index);
-//					encodeVertex(index, coord_estimated, uv_estimated, last_index);
+				else {
+					prediction[current_vertex] = Quad(index, last_index, last_index, last_index);
+					encoded[index] = current_vertex++;
+//					encodeVertex(index, last_index, last_index, last_index);
+				}
 
 				last_index = index;
 				coord_estimated = coord.values[index];
@@ -850,7 +914,9 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 			} else {
 				//vertex needed for parallelogram prediction
 				int v2 = faces[e.face].f[e.side];
-				encodeVertex(opposite, v0, v1, v2);
+				prediction[current_vertex] = Quad(opposite, v0, v1, v2);
+				encoded[opposite] = current_vertex++;
+				//encodeVertex(opposite, v0, v1, v2);
 			}
 
 			previous_edge.next = first_edge;

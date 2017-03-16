@@ -240,9 +240,9 @@ void NxzDecoder::dequantize() {
 		for(uint32_t i = 0; i < nvert; i++) {
 			Point3i &q = coords[i];
 			Point3f &p = points[i];
-			p[0] = (q[0] + coord.o[0])*coord.q;
-			p[1] = (q[1] + coord.o[1])*coord.q;
-			p[2] = (q[2] + coord.o[2])*coord.q;
+			p[0] = q[0]*coord.q;
+			p[1] = q[1]*coord.q;
+			p[2] = q[2]*coord.q;
 		}
 	}
 

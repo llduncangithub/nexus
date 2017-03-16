@@ -76,6 +76,7 @@ private:
 
 	std::vector<bool> boundary;
 	std::vector<int> encoded;    //encoded vertex number
+	std::vector<Quad> prediction;
 
 	void setCoordBits();
 	void setDataBits();

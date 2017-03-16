@@ -14,6 +14,18 @@ enum Normals { DIFF = 0,      //do not estimate normals, use diffs to previous
 			   BORDER = 2 };  //encode differences only on the boundary
 
 
+struct Face {
+	uint32_t a, b, c;
+	Face() {}
+	Face(uint32_t v0, uint32_t v1, uint32_t v2): a(v0), b(v1), c(v2) {}
+};
+
+struct Quad {
+	uint32_t t, a, b, c;
+	Quad() {}
+	Quad(uint32_t _t, uint32_t v0, uint32_t v1, uint32_t v2): t(_t), a(v0), b(v1), c(v2) {}
+};
+
 template <typename S> struct Attribute {
 	float q;       //quantization
 	S o;           //origin
