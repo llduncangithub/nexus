@@ -96,8 +96,6 @@ private:
 	void computeNormals(std::vector<Point2i> &estimated_normals);
 	void markBoundary();
 
-	bool encodeVertex(int target, int v0, int v1, int v2);
-
 	void encodeDiff(std::vector<uchar> &diffs, BitStream &stream, int val);
 	void encodeDiff(std::vector<uchar> &diffs, BitStream &stream, const Point2i &val);
 	void encodeDiff(std::vector<uchar> &diffs, BitStream &stream, const Point3i &val);

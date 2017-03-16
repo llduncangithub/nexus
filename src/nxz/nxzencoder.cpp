@@ -934,51 +934,6 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 	}
 }
 
-bool NxzEncoder::encodeVertex(int target, int v0, int v1, int v2) {
-//bool NxzEncoder::encodeVertex(int target, const Point3i &predicted, const Point2i &texpredicted, int last) {
-
-	assert(encoded[target] == -1);
-
-	//notice how vertex needs to be reordered
-	coord.diffs[current_vertex] = coord.values[target];
-	if(v0 >= 0)
-		coord.diffs[current_vertex] -= (coord.values[v0] + coord.values[v1] - coord.values[v2]);
-
-	if((flags & NORMAL)) {
-		Point2i &dt = norm.diffs[current_vertex];
-		dt = norm.values[target];
-
-		assert(abs(dt[0]) < (1<<25));
-		assert(abs(dt[1]) < (1<<25));
-
-		if(normals_prediction == DIFF && v0 >= 0) {
-			dt -= norm.values[v0];
-			if(dt[0] < -norm.q)      dt[0] += 2*norm.q;
-			else if(dt[0] > +norm.q) dt[0] -= 2*norm.q;
-			if(dt[1] < -norm.q)      dt[1] += 2*norm.q;
-			else if(dt[1] > +norm.q) dt[1] -= 2*norm.q;
-		}
-	}
-
-	if(flags & COLOR) {
-		for(int k = 0; k < 4; k++)
-			color[k].diffs[current_vertex] = color[k].values[target] - ((v0 < 0)? 0: color[k].values[v0]);
-	}
-
-	if(flags & UV) {
-		uv.diffs[current_vertex] = uv.values[target];
-		if(v0 >= 0)
-			uv.diffs[current_vertex] -= (uv.values[v0] + uv.values[v1] - uv.values[v2]);
-	}
-
-	for(auto &da: data)
-		da.diffs[current_vertex] = da.values[target] - (v0 < 0)? 0: da.values[v0];
-
-	encoded[target] = current_vertex++;
-	return false;
-}
-
-
 /*
  0    -> 0 []
 -1, 1 -> 1, [0,1]
