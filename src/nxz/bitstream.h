@@ -38,7 +38,7 @@ public:
 	void write(uint64_t bits, int n);
 	void writeUint(uint64_t bits, int n);
 	void read(int n, uint64_t &bits);
-	uint32_t readUint(int numbits); //faster
+	uint64_t readUint(int numbits); //faster
 	uint64_t writtenBits();
 
 

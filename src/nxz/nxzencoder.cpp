@@ -71,7 +71,7 @@ void NxzEncoder::addCoords(float *buffer, float q, Point3f o) {
 			max.setMax(coords[i]);
 		}
 		max -= min;
-		q = pow(max[0]*max[1]*max[2], 2.0/3.0)/nvert;
+		q = 0.01*pow(max[0]*max[1]*max[2], 2.0/3.0)/nvert;
 		if(o == Point3f(FLT_MAX))
 			o = min;
 	}
@@ -268,7 +268,6 @@ void NxzEncoder::encode() {
 	stream.reserve(nvert);
 
 	stream.write<int>(flags);
-	stream.write<int>(nvert);
 	stream.write<uchar>(stream.entropy);
 
 	stream.write<float>(coord.q);
@@ -308,8 +307,13 @@ void NxzEncoder::encode() {
 void NxzEncoder::encodePointCloud() {
 	std::vector<ZPoint> zpoints(nvert);
 
+	Point3i min(0, 0, 0);
 	for(uint32_t i = 0; i < nvert; i++) {
 		Point3i &q = coord.values[i];
+		min.setMin(q);
+	}
+	for(uint32_t i = 0; i < nvert; i++) {
+		Point3i q = coord.values[i] - min;
 		zpoints[i] = ZPoint(q[0], q[1], q[2], 21, i);
 	}
 	sort(zpoints.rbegin(), zpoints.rend());//, greater<ZPoint>());
@@ -327,6 +331,7 @@ void NxzEncoder::encodePointCloud() {
 
 	header_size = stream.elapsed();
 
+	stream.write<int>(nvert);
 	encodeZPoints(zpoints);
 
 	//reorder attributes, compute differences end encode
@@ -366,8 +371,18 @@ void NxzEncoder::encodePointCloud() {
 void NxzEncoder::encodeZPoints(std::vector<ZPoint> &zpoints) {
 	vector<uchar> diffs;
 	BitStream bitstream(nvert/2);
-	bitstream.write(zpoints[0].bits, 63);
 
+	coord.diffs.resize(nvert);
+	coord.diffs[0] = coord.values[zpoints[0].pos];
+	for(uint32_t i = 1; i < nvert; i++)
+		coord.diffs[i] = coord.values[zpoints[i].pos] - coord.values[zpoints[i-1].pos];
+
+	for(Point3i &d: coord.diffs)
+		encodeDiff(diffs, bitstream, d);
+
+/*	Zpoint encoding gain 1 bit (because we know it's sorted, but it's 3/2 slower and limited to 22 bits precision.
+ *
+ * bitstream.write(zpoints[0].bits, 63);
 	for(uint32_t pos = 1; pos < nvert; pos++) {
 		ZPoint &p = zpoints[pos-1]; //previous point
 		ZPoint &q = zpoints[pos]; //current point
@@ -375,7 +390,7 @@ void NxzEncoder::encodeZPoints(std::vector<ZPoint> &zpoints) {
 		diffs.push_back(d);
 		//we can get away with d diff bits (should be d+1) because the first bit will always be 1 (sorted q> p)
 		bitstream.write(q.bits, d); //rmember to add a 1, since
-	}
+	} */
 
 	stream.compress(diffs.size(), &*diffs.begin());
 	stream.write(bitstream);
@@ -487,6 +502,7 @@ void NxzEncoder::encodeMesh() {
 	face.values.resize(count*3);
 	nface = count;
 
+	stream.write<int>(nvert);
 	stream.write<int>(nface);
 	stream.write<int>(groups.size());
 	for(uint32_t &end: groups)
@@ -565,13 +581,6 @@ void NxzEncoder::encodeMesh() {
 			da.diffs[i] = da.values[q.t] - da.values[q.a];
 		}
 	}
-
-
-
-
-
-
-
 
 
 
@@ -1019,3 +1028,4 @@ void NxzEncoder::encodeDiff(vector<uchar> &diffs, BitStream &bitstream, const Po
 	bitstream.writeUint(val[1] + max, diff);
 	bitstream.writeUint(val[2] + max, diff);
 }
+

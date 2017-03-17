@@ -117,7 +117,7 @@ void BitStream::write(uint64_t value, int numbits) {
 	}
 }
 
-uint32_t BitStream::readUint(int numbits) {
+uint64_t BitStream::readUint(int numbits) {
 	assert(numbits > 0);
 	uint64_t ret = 0;
 

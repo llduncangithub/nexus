@@ -43,7 +43,6 @@ NxzDecoder::NxzDecoder(int len, uchar *input):
 	stream.init(len, input);
 
 	flags = stream.read<int>();
-	nvert = stream.read<int>();
 	stream.entropy = (Stream::Entropy)stream.read<uchar>();
 
 	coord.q = stream.read<float>();
@@ -104,6 +103,8 @@ void NxzDecoder::decode() {
 }
 
 void NxzDecoder::decodePointCloud() {
+	nvert = stream.read<int>();
+
 	decodeZPoints();
 
 	if(flags & NORMAL)
@@ -126,23 +127,31 @@ void NxzDecoder::decodeZPoints() {
 	BitStream bitstream;
 	stream.read(bitstream);
 
-	vector<ZPoint> zpoints(nvert);
-	bitstream.read(63, zpoints[0].bits);
-	//TODO Optimize: we could do it without zpoints array
-	for(size_t i = 1; i < zpoints.size(); i++) {
-		ZPoint &p = zpoints[i];
-		p = zpoints[i-1];
-		uchar d = diffs[i-1];
-		p.setBit(d, 1);
-		uint64_t e = 0; //1<<d;
-		bitstream.read(d, e);
-		p.bits &= ~((1LL<<d) -1);
-		p.bits |= e;
+
+	Point3i *coordi = (Point3i *)coord.buffer;
+	Point3f *coordf = (Point3f *)coord.buffer;
+
+	Point3i last(0, 0, 0);
+	for(uint32_t i = 0; i < nvert; i++) {
+		decodeDiff(diffs[i], bitstream, coordi[i]);
+		last += coordi[i];
+		coordf[i] = Point3f(last[0]*coord.q, last[1]*coord.q, last[2]*coord.q);
 	}
+/*
+	Zpoint encoding gain 1 bit (because we know it's sorted: diffs are positive!, but it's 3/2 slower and limited to 22 bits precision.
 
 	Point3f *coords = (Point3f *)coord.buffer;
-	for(size_t i = 0; i < zpoints.size(); i++)
-		coords[i] = zpoints[i].toPoint(coord.o, coord.q);
+
+	ZPoint p;
+	bitstream.read(63, p.bits);
+	coords[0] = p.toPoint(coord.q);
+	for(size_t i = 1; i < nvert; i++) {
+		uchar d = diffs[i-1];
+		p.setBit(d, 1);
+		bitstream.read(d, p.bits);
+		coords[i] = coords[0] + p.toPoint(coord.q);
+	}
+	*/
 }
 
 void NxzDecoder::decodeCoords() {
@@ -358,6 +367,7 @@ void NxzDecoder::computeNormals(Point3f *normals, Point3f *estimated) {
 }
 
 void NxzDecoder::decodeMesh() {
+	nvert = stream.read<int>();
 	nface = stream.read<int>();
 	groups.resize(stream.read<int>());
 	for(uint32_t &g: groups)
@@ -677,15 +687,43 @@ int NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream) {
 	return val;
 }
 
+static uint64_t bmask[] = {
+	0x00,     0x01,       0x03,        0x07,        0x0f,       0x01f,       0x03f,       0x07f,
+	0xff,     0x01ff,     0x03ff,      0x07ff,      0x0fff,     0x01fff,     0x03fff,     0x07fff,
+	0xffff,   0x01ffff,   0x03ffff,    0x07ffff,    0x0fffff,   0x01fffff,   0x03fffff,   0x07fffff,
+	0xffffff, 0x01ffffff, 0x03ffffff,  0x07ffffff,  0x0fffffff, 0x01fffffff, 0x03fffffff, 0x7fffffff,
+
+	0xffffffff,       0x01ffffffff,       0x03ffffffff,        0x07ffffffff,        0x0fffffffff,       0x01fffffffff,       0x03fffffffff,       0x07fffffffff,
+	0xffffffffff,     0x01ffffffffff,     0x03ffffffffff,      0x07ffffffffff,      0x0fffffffffff,     0x01fffffffffff,     0x03fffffffffff,     0x07fffffffffff,
+	0xffffffffffff,   0x01ffffffffffff,   0x03ffffffffffff,    0x07ffffffffffff,    0x0fffffffffffff,   0x01fffffffffffff,   0x03fffffffffffff,   0x07fffffffffffff,
+	0xffffffffffffff, 0x01ffffffffffffff, 0x03ffffffffffffff,  0x07ffffffffffffff,  0x0fffffffffffffff, 0x01fffffffffffffff, 0x03fffffffffffffff, 0x07fffffffffffffff,
+
+	0xffffffffffffffff };
+
+static uint64_t bmax[] = { 0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024,
+						   1<<11, 1<<12, 1<<13, 1<<14, 1<<15, 1<<16, 1<<17, 1<<18, 1<<19, 1<< 20,
+						   1<<21, 1<<22, 1<<23, 1<<24, 1<<25, 1<<26, 1<<27, 1<<28, 1<<29, 1<<30, 1<<31 };
+
 void NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream, Point3i &p) {
 	if(diff == 0) {
 		p[0] = p[1] = p[2] = 0;
 		return;
 	}
-	int max = 1<<(diff-1);
-	p[0] = bitstream.readUint(diff) - max;
-	p[1] = bitstream.readUint(diff) - max;
-	p[2] = bitstream.readUint(diff) - max;
+	//making a single read is 2/3 faster
+	uint64_t &max = bmax[diff];
+	if(diff < 22) {
+		uint64_t &mask = bmask[diff]; //using table is 4% faster
+		uint64_t bits = bitstream.readUint(3*diff);
+		p[2] = (bits & mask) - max;
+		bits >>= diff;
+		p[1] = (bits & mask) - max;
+		bits >>= diff;
+		p[0] = bits - max;
+	} else {
+		p[0] = bitstream.readUint(diff) - max;
+		p[1] = bitstream.readUint(diff) - max;
+		p[2] = bitstream.readUint(diff) - max;
+	}
 }
 
 void NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream, Point3s &p) {
@@ -696,10 +734,21 @@ void NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream, Point3s &p) {
 		return;
 	}
 
-	int max = 1<<(diff-1);
-	p[0] = bitstream.readUint(diff) - max;
-	p[1] = bitstream.readUint(diff) - max;
-	p[2] = bitstream.readUint(diff) - max;
+	//making a single read is 2/3 faster
+	uint64_t &max = bmax[diff];
+	if(diff < 22) {
+		uint64_t &mask = bmask[diff];
+		uint64_t bits = bitstream.readUint(3*diff);
+		p[2] = (bits & mask) - max;
+		bits >>= diff;
+		p[1] = (bits & mask) - max;
+		bits >>= diff;
+		p[0] = bits - max;
+	} else {
+		p[0] = bitstream.readUint(diff) - max;
+		p[1] = bitstream.readUint(diff) - max;
+		p[2] = bitstream.readUint(diff) - max;
+	}
 }
 
 void NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream, Point2i &p) {
@@ -709,9 +758,18 @@ void NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream, Point2i &p) {
 		return;
 	}
 
-	int max = 1<<(diff-1);
-	p[0] = bitstream.readUint(diff) - max;
-	p[1] = bitstream.readUint(diff) - max;
+	//making a single read is faster
+	uint64_t &max = bmax[diff];
+	if(diff < 22) {
+		uint64_t &mask = bmask[diff];
+		uint64_t bits = bitstream.readUint(2*diff);
+		p[1] = (bits & mask) - max;
+		bits >>= diff;
+		p[0] = bits - max;
+	} else {
+		p[0] = bitstream.readUint(diff) - max;
+		p[1] = bitstream.readUint(diff) - max;
+	}
 }
 
 void NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream, Point2s &p) {
@@ -722,7 +780,16 @@ void NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream, Point2s &p) {
 		return;
 	}
 
-	int max = 1<<(diff-1);
-	p[0] = bitstream.readUint(diff) - max;
-	p[1] = bitstream.readUint(diff) - max;
+	//making a single read is faster
+	uint64_t &max = bmax[diff];
+	if(diff < 22) {
+		uint64_t &mask = bmask[diff];
+		uint64_t bits = bitstream.readUint(2*diff);
+		p[1] = (bits & mask) - max;
+		bits >>= diff;
+		p[0] = bits - max;
+	} else {
+		p[0] = bitstream.readUint(diff) - max;
+		p[1] = bitstream.readUint(diff) - max;
+	}
 }

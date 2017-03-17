@@ -72,6 +72,14 @@ public:
 		p *= step;
 		return p;
 	}
+	Point3f toPoint(float step) {
+		uint32_t x = morton3(bits);
+		uint32_t y = morton3(bits>>1);
+		uint32_t z = morton3(bits>>2);
+
+		return Point3f(x*step, y*step, z*step);
+	}
+
 
 #ifdef WIN32
 #define ONE64 ((__int64)1)
