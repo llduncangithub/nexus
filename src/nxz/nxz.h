@@ -28,13 +28,13 @@ struct Quad {
 
 template <typename S> struct Attribute {
 	float q;       //quantization
-	S o;           //origin
+//	S o;           //origin
 	uint32_t size; //for stats
 	std::vector<S> values;
 	std::vector<S> diffs;
 	void *buffer;
 	Attribute(): q(0.0f), buffer(nullptr) {}
-	Attribute(float _q, S _o): q(_q), o(_o), size(0), buffer(nullptr) {}
+	Attribute(float _q): q(_q), size(0), buffer(nullptr) {}
 };
 
 

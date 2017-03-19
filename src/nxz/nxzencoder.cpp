@@ -37,19 +37,17 @@ static int ilog2(uint64_t p) {
 
 NxzEncoder::NxzEncoder(uint32_t _nvert, uint32_t _nface, Stream::Entropy entropy):
 	flags(0), nvert(_nvert), nface(_nface),
-	coord(0.0f, Point3i(0)),
-	norm(0.0f, Point2i(0)),
-	uv(0.0f, Point2i(0)),
+	coord(0.0f), norm(0.0f), uv(0.0f),
 	header_size(0), normals_prediction(ESTIMATED), current_vertex(0) {
 
 	stream.entropy = entropy;
 	/*	coord_o(2147483647), uv_o(2147483647), coord_q(0), uv_q(0), coord_bits(12), uv_bits(12), norm_bits(10),
 	coord_size(0), normal_size(0), color_size(0), face_size(0), uv_size(0) {
 	color_bits[0] = color_bits[1] = color_bits[2] = color_bits[3] = 6; */
-	color[0] = Attribute<uchar>(0.0f, 0);
-	color[1] = Attribute<uchar>(0.0f, 0);
-	color[2] = Attribute<uchar>(0.0f, 0);
-	color[3] = Attribute<uchar>(0.0f, 0);
+	color[0] = Attribute<uchar>(0.0f);
+	color[1] = Attribute<uchar>(0.0f);
+	color[2] = Attribute<uchar>(0.0f);
+	color[3] = Attribute<uchar>(0.0f);
 
 	coord.values.resize(nvert);
 	face.values.resize(nface*3);
@@ -140,14 +138,15 @@ void NxzEncoder::addCoords(int *buffer, uint16_t *_index) {
 }
 
 void NxzEncoder::setCoordBits() {
-	for(auto &q: coord.values)
-		coord.o.setMin(q);
-
+	//This should be stored somewhere for testing purpouses.
 	if(1) {
+		Point3i cmin(2147483647);
 		Point3i cmax(-2147483647);
 		for(auto &q: coord.values) {
-			cmax.setMax(q - coord.o);
+			cmin.setMin(q);
+			cmax.setMax(q);
 		}
+		cmax -= cmin;
 
 		int bits = 1+std::max(std::max(ilog2(cmax[0]), ilog2(cmax[1])), ilog2(cmax[2]));
 		if(!(flags & INDEX) && bits >= 22)
@@ -222,14 +221,14 @@ void NxzEncoder::addUV(float *buffer, float q) {
 		uv.values[i][1] = (int)round(uvs[i][1]/uv.q);
 	}
 
-	for(auto &q: uv.values)
-		uv.o.setMin(q);
-
 	if(1) {
+		Point2i cmin( 2147483647);
 		Point2i cmax(-2147483647);
 		for(auto &q: uv.values) {
-			cmax.setMax(q -uv.o);
+			cmax.setMax(q);
+			cmin.setMin(q);
 		}
+		cmax -= cmin;
 		int bits = 1 + std::max(ilog2(cmax[0]), ilog2(cmax[1]));
 		cout << "Texture cooridnates quantization in " << bits << " bits\n";
 	}
@@ -259,9 +258,15 @@ void NxzEncoder::addData(int *buffer) {
 
 void NxzEncoder::setDataBits() {
 	auto &d = data.back();
-	d.o = 2147483647;
-	for(auto &q: d.values)
-		if(q < d.o) d.o = q;
+	int cmin =  2147483647;
+	int cmax = -2147483647;
+
+	for(auto &q: d.values) {
+		if(q < cmin) cmin = q;
+		if(q > cmax) cmax = q;
+	}
+	cmax -= cmin;
+	cout << "Data quantized in: " << 1 + ilog2(cmax) << " bits." << endl;
 }
 
 void NxzEncoder::encode() {
@@ -271,9 +276,6 @@ void NxzEncoder::encode() {
 	stream.write<uchar>(stream.entropy);
 
 	stream.write<float>(coord.q);
-	stream.write<int>(coord.o[0]);
-	stream.write<int>(coord.o[1]);
-	stream.write<int>(coord.o[2]);
 
 	if(flags & NORMAL) {
 		stream.write<uchar>(normals_prediction);
@@ -285,17 +287,12 @@ void NxzEncoder::encode() {
 			stream.write<float>(color[k].q);
 
 
-	if(flags & UV) {
+	if(flags & UV)
 		stream.write<float>(uv.q);
-		stream.write<int>(uv.o[0]);
-		stream.write<int>(uv.o[1]);
-	}
 
 	stream.write<int>(data.size());
-	for(auto &d: data) {
+	for(auto &d: data)
 		stream.write<float>(d.q);
-		stream.write<int>(d.o);
-	}
 
 	if(flags & INDEX)
 		encodeMesh();
@@ -823,7 +820,6 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 				else {
 					prediction[current_vertex] = Quad(index, last_index, last_index, last_index);
 					encoded[index] = current_vertex++;
-//					encodeVertex(index, last_index, last_index, last_index);
 				}
 
 				last_index = index;
@@ -925,7 +921,6 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 				int v2 = faces[e.face].f[e.side];
 				prediction[current_vertex] = Quad(opposite, v0, v1, v2);
 				encoded[opposite] = current_vertex++;
-				//encodeVertex(opposite, v0, v1, v2);
 			}
 
 			previous_edge.next = first_edge;

@@ -46,9 +46,6 @@ NxzDecoder::NxzDecoder(int len, uchar *input):
 	stream.entropy = (Stream::Entropy)stream.read<uchar>();
 
 	coord.q = stream.read<float>();
-	coord.o[0] = stream.read<int>();
-	coord.o[1] = stream.read<int>();
-	coord.o[2] = stream.read<int>();
 
 	if(flags & NORMAL) {
 		normals_prediction = (Normals)stream.read<uchar>();
@@ -59,16 +56,12 @@ NxzDecoder::NxzDecoder(int len, uchar *input):
 		for(int k = 0; k < 4; k++)
 			color[k].q = stream.read<float>();
 
-	if(flags & UV) {
+	if(flags & UV)
 		uv.q = stream.read<float>();
-		uv.o[0] = stream.read<int>();
-		uv.o[1] = stream.read<int>();
-	}
+
 	data.resize(stream.read<int>());
-	for(auto &da: data) {
+	for(auto &da: data)
 		da.q = stream.read<float>();
-		da.o = stream.read<int>();
-	}
 }
 
 void NxzDecoder::setCoords(float *buffer) { coord.buffer = buffer; }
@@ -491,7 +484,7 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 	int new_edge = -1; //last edge added which sohuld be the first to be processed, no need to store it in faceorder.
 
 	while(start < end) {
-		if(new_edge == -1 && !faceorder.size() && !delayed.size()) {
+		if(new_edge == -1 && order >= faceorder.size() && !delayed.size()) {
 
 			int last_index = vertex_count-1;
 			int index[3];
@@ -509,7 +502,6 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 				else {
 					prediction[vertex_count] = Face(last_index, last_index, last_index);
 					v = vertex_count++;
-//					v = decodeVertex(last_index, last_index, last_index);
 				}
 				index[k] = v;
 				if(short_index)
@@ -533,12 +525,17 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 		if(new_edge != -1) {
 			f = new_edge;
 			new_edge = -1;
+
 		} else if(order < faceorder.size()) {
 			f = faceorder[order++];
-		} else {
+		} else if (delayed.size()){
 			f = delayed.back();
 			delayed.pop_back(); //or popfront?
+
+		} else {
+			throw "Decoding topology failed";
 		}
+
 		DEdge2 &e = front[f];
 		if(e.deleted) continue;
 		//e.deleted = true; //each edge is processed once at most.
@@ -563,7 +560,6 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 				//Edge is inverted respect to encoding hence v1-v0 inverted.
 				prediction[vertex_count] = Face(v1, v0, e.v2);
 				opposite = vertex_count++;
-				//opposite = decodeVertex(v1, v0, e.v2);
 			}
 
 			previous_edge.next = new_edge;
@@ -640,7 +636,6 @@ int NxzDecoder::decodeVertex(int v0, int v1, int v2) {
 			if(short_normals) {
 				Point3s &n = ((Point3s *)norm.buffer)[v];
 				Point3s &ref = ((Point3s *)norm.buffer)[v0];
-				//TODO slightly faster to avoid +=.
 				n[0] += ref[0];
 				n[1] += ref[1];
 				if(n[0] < -norm.q)      n[0] += 2*norm.q;
@@ -702,7 +697,7 @@ static uint64_t bmask[] = {
 
 static uint64_t bmax[] = { 0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024,
 						   1<<11, 1<<12, 1<<13, 1<<14, 1<<15, 1<<16, 1<<17, 1<<18, 1<<19, 1<< 20,
-						   1<<21, 1<<22, 1<<23, 1<<24, 1<<25, 1<<26, 1<<27, 1<<28, 1<<29, 1<<30, 1<<31 };
+						   1<<21, 1<<22, 1<<23, 1<<24, 1<<25, 1<<26, 1<<27, 1<<28, 1<<29, 1<<30 };
 
 void NxzDecoder::decodeDiff(uchar diff, BitStream &bitstream, Point3i &p) {
 	if(diff == 0) {
