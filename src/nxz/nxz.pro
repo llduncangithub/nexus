@@ -17,7 +17,8 @@ SOURCES += main.cpp \
     tunstall.cpp \
     bitstream.cpp \
     ../../../vcglib/wrap/ply/plylib.cpp \
-    cstream.cpp
+    cstream.cpp \
+    nxz.cpp
 HEADERS += \
     nxzdecoder.h \
     nxzencoder.h \

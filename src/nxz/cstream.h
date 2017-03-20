@@ -53,6 +53,7 @@ public:
 
 	int size() { return pos - buffer; }
 	uchar *data() { return buffer; }
+	void restart() { stopwatch = size(); }
 	int elapsed() {
 		int e = size() - stopwatch; stopwatch = size();
 		return e;
@@ -153,6 +154,16 @@ public:
 		grow(s);
 		memcpy(pos, b, s);
 		pos += s;
+	}
+
+
+	static int needed(int a) {
+		if(a == 0) return 0;
+		if(a == -1) return 1;
+		if(a < 0) a = -a - 1;
+		int n = 2;
+		while(a >>= 1) n++;
+		return n;
 	}
 
 };

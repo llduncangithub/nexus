@@ -10,7 +10,6 @@
 using namespace nx;
 using namespace std;
 
-
 //TODO uniform notation length first, pointer after everywhere
 int Stream::compress(uint32_t size, uchar *data) {
 	switch(entropy) {

@@ -65,8 +65,8 @@ int main(int argc, char *argv[]) {
 
 	nx::NxzEncoder encoder(nvert, nface, nx::Stream::TUNSTALL);
 	encoder.addCoords((float *)&*coords.begin(), &*index.begin());
-	encoder.addNormals((float *)&*normals.begin(), 10, nx::DIFF);
-	encoder.addColors((unsigned char *)&*colors.begin());
+//	encoder.addNormals((float *)&*normals.begin(), 10, nx::DIFF);
+//	encoder.addColors((unsigned char *)&*colors.begin());
 	encoder.encode();
 
 	nvert = encoder.nvert;
@@ -74,7 +74,7 @@ int main(int argc, char *argv[]) {
 
 	cout << "Nvert: " << nvert << " Nface: " << nface << endl;
 	cout << "Compressed to: " << encoder.stream.size() << endl;
-	cout << "Ratio: " << 100.0f*encoder.stream.size()/(nvert*12 + nface*12) << endl;
+	cout << "Ratio: " << 100.0f*encoder.stream.size()/(nvert*12 + nface*12) << "%" << endl;
 	cout << "Bpv: " << 8.0f*encoder.stream.size()/nvert << endl << endl;
 
 	cout << "Header: " << encoder.header_size << " bpv: " << (float)encoder.header_size/nvert << endl;
@@ -109,8 +109,8 @@ int main(int argc, char *argv[]) {
 	for(int i = 0; i < iter; i++) {
 		nx::NxzDecoder decoder(encoder.stream.size(), encoder.stream.data());
 		decoder.setCoords((float *)&*recoords.begin());
-		decoder.setNormals((float *)&*renorms.begin());
-		decoder.setColors((uchar *)&*recolors.begin());
+//		decoder.setNormals((float *)&*renorms.begin());
+//		decoder.setColors((uchar *)&*recolors.begin());
 		decoder.setIndex(&*reindex.begin());
 		decoder.decode();
 	}

@@ -36,68 +36,91 @@ template <typename S> struct Attribute {
 	Attribute(float _q): q(_q), size(0), buffer(nullptr) {}
 };
 
+void encodeDiffs(Stream &stream, uint32_t size, int *values);
+void encodeDiffs(Stream &stream, uint32_t size, short *values);
+void encodeDiffs(Stream &stream, uint32_t size, Point2i *values);
+void encodeDiffs(Stream &stream, uint32_t size, Point2s *values);
+void encodeDiffs(Stream &stream, uint32_t size, Point3i *values);
+void encodeDiffs(Stream &stream, uint32_t size, Point3s *values);
+
+int decodeDiff(Stream &stream, int *values);
+int decodeDiff(Stream &stream, short *values);
+int decodeDiff(Stream &stream, Point2i *values);
+int decodeDiff(Stream &stream, Point2s *values);
+int decodeDiff(Stream &stream, Point3i *values);
+int decodeDiff(Stream &stream, Point3s *values);
+
 
 class Attribute23 {
+public:
 	float q;         //quantization step
 	char *buffer;    //input data buffer
 	uint32_t size;   //compressed size
 
 	Attribute23(float _q = 0.0f): q(_q), buffer(nullptr), size(0) {}
-	virtual void quantize(char *buffer) = 0; //quantize and store as values
-	virtual void predict(std::vector<Point3i> &coords, std::vector<int> &faces) {}                     //for example normal predicted from coords.... ooooooppppppsssssss
-	virtual void diff(std::vector<Quad> &context) = 0; //use parallelogram prediction or just diff from v0
-	virtual void encode(Stream &stream) = 0;           //compress diffs.
+	//quantize and store as values
+	virtual void quantize(uint32_t nvert, char *buffer) = 0;
+	//use parallelogram prediction or just diff from v0
+	virtual void diff(std::vector<Quad> &context, std::vector<Point3i> &coords, std::vector<int> &faces) = 0;
+	//compress diffs and write to stream
+	virtual void encode(Stream &stream) = 0;
 
-	virtual void decode(Stream &stream) = 0;
+	//read quantized data from stream
+	virtual void decode(uint32_t nvert, Stream &stream) = 0;
+	//use parallelogram prediction to recover values
 	virtual void dediff(std::vector<Point3i> &coords, std::vector<int> &index, std::vector<Face> &faces) = 0;
-	virtual void dequantize() = 0;
+	//reverse quantization operations
+	virtual void dequantize(uint32_t nvert) = 0;
 };
 
-
-/*
-//in -> internal representation Point3i, OUT external representation (Point3f)
-	float q;       //quantization
-	IN o;          //origin
-	uint32_t size; //for stats
-	OUT *buffer;
-	bool predicted;
-
-	std::vector<IN> values;
-	std::vector<IN> diffs;
-
-	Attribute1(): q(0.0f), buffer(nullptr) {}
-	Attribute1(float _q, S _o, bool _predicted = false): q(_q), o(_o), size(0), buffer(nullptr), predicted(_predicted) {}
-
-	virtual void add(OUT *buffer) = 0;
-	virtual void encode(Stream &stream) {
-		std::vector<uchar> diffs;
-		BitStream bitstream(diffs.size());
-
-		for(auto &u: diffs)
-			encodeDiff(diffs, bitstream, u);
-
-		Tunstall::compress(stream, &*diffs.begin(), diffs.size());
-		stream.write(bitstream);
-		size = stream.elapsed();
+//T internal format, S external format
+template <class T, class S> class Data: public Attribute23 {
+public:
+	std::vector<T> values, diffs;
+	virtual void quantize(uint32_t nvert, S *buffer) {
+		values.resize(nvert);
+		diffs.resize(nvert);
+		for(uint32_t i = 0; i < nvert; i++)
+			values[i] = buffer[i]/q;
 	}
 
-	virtual void diff(int diffindex, int valueindex, int lastindex) {
-		diffs[diffindex] = values[valueindex];
-		if(last != -1) {
-			if(predicted)
-				diffs[diffindex] = values[valueindex] - (values[v0] + values[v1] - values[v2]);
-			else
-				diffs[diffindex] -= diffs[lastindex];
+	virtual void diff(std::vector<Quad> &context, std::vector<Point3i> &/*coords*/, std::vector<int> &/*faces*/) {
+		diffs[0] = values[context[0].t];
+		for(uint32_t i = 1; i < context.size(); i++) {
+			Quad &q = context[i];
+			diffs[i] = values[q.t] - (values[q.a] + values[q.b] - values[q.c]);
 		}
 	}
 
+	virtual void encode(Stream &stream) {
+		stream.restart();
+		encodeDiff(stream, diffs);
+		size = stream.elapsed();
+	}
 
+	virtual void decode(uint32_t nvert, Stream &stream) {
+		T *coords = (T *)buffer;
+		int readed = decodeDiff(stream, coords);
+	}
+
+	virtual void dediff(std::vector<Point3i> &/*coords*/, std::vector<int> &/*index*/, std::vector<Face> &context) {
+		T *values = (T *)buffer;
+		for(uint32_t i = 1; i < context.size(); i++) {
+			Face &f = context[i];
+			values[i] += values[f.a] + values[f.b] - values[f.c];
+		}
+	}
+
+	virtual void dequantize(uint32_t nvert) {
+		T *coords = (T *)buffer;
+		S *points = (S *)buffer;
+		for(uint32_t i = 0; i < nvert; i++) {
+			T &v = coords[i];
+			S &p = points[i];
+			p = ((S)v)*q;
+		}
+	}
 };
-
-class ColordAttribute: public Attribute<Point3i> {
-
-};
-*/
 
 } //namespace
 
