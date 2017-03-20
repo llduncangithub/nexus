@@ -392,6 +392,13 @@ void NxzDecoder::decodeMesh() {
 		decodeFaces(start*3, end*3, cler, bitstream);
 		start = end;
 	}
+#ifdef PRESERVED_UNREFERENCED
+	//decode unreferenced vertices
+	while(vertex_count < nvert) {
+		int last = vertex_count-1;
+		prediction[vertex_count++] = Face(last, last, last);
+	}
+#endif
 
 	Point3i *coords = (Point3i *)coord.buffer;
 	for(uint32_t i = 1; i < nvert; i++) {

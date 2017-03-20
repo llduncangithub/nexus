@@ -28,7 +28,6 @@ struct Quad {
 
 template <typename S> struct Attribute {
 	float q;       //quantization
-//	S o;           //origin
 	uint32_t size; //for stats
 	std::vector<S> values;
 	std::vector<S> diffs;
@@ -38,10 +37,25 @@ template <typename S> struct Attribute {
 };
 
 
+class Attribute23 {
+	float q;         //quantization step
+	char *buffer;    //input data buffer
+	uint32_t size;   //compressed size
+
+	Attribute23(float _q = 0.0f): q(_q), buffer(nullptr), size(0) {}
+	virtual void quantize(char *buffer) = 0; //quantize and store as values
+	virtual void predict(std::vector<Point3i> &coords, std::vector<int> &faces) {}                     //for example normal predicted from coords.... ooooooppppppsssssss
+	virtual void diff(std::vector<Quad> &context) = 0; //use parallelogram prediction or just diff from v0
+	virtual void encode(Stream &stream) = 0;           //compress diffs.
+
+	virtual void decode(Stream &stream) = 0;
+	virtual void dediff(std::vector<Point3i> &coords, std::vector<int> &index, std::vector<Face> &faces) = 0;
+	virtual void dequantize() = 0;
+};
+
 
 /*
 //in -> internal representation Point3i, OUT external representation (Point3f)
-template <typename IN, typename OUT> struct Attribute1 {
 	float q;       //quantization
 	IN o;          //origin
 	uint32_t size; //for stats

@@ -58,6 +58,8 @@ int main(int argc, char *argv[]) {
 	uint32_t nvert = mesh.vert.size();
 	uint32_t nface = mesh.face.size();
 
+
+
 //	nx::NxzEncoder encoder(nvert, 0, nx::Stream::TUNSTALL);
 //	encoder.addCoords((float *)&*coords.begin());
 
@@ -66,6 +68,9 @@ int main(int argc, char *argv[]) {
 	encoder.addNormals((float *)&*normals.begin(), 10, nx::DIFF);
 	encoder.addColors((unsigned char *)&*colors.begin());
 	encoder.encode();
+
+	nvert = encoder.nvert;
+	nface = encoder.nface;
 
 	cout << "Nvert: " << nvert << " Nface: " << nface << endl;
 	cout << "Compressed to: " << encoder.stream.size() << endl;
@@ -92,11 +97,9 @@ int main(int argc, char *argv[]) {
 
 	cout << "Face bpv; " << 8.0f*encoder.face.size/nvert << endl;
 
-	nvert = encoder.nvert;
-	nface = encoder.nface;
 	std::vector<vcg::Point3f> recoords(nvert);
-	std::vector<vcg::Point3f> renorms(nvert);
-	std::vector<vcg::Color4b> recolors(nvert);
+	std::vector<vcg::Point3f> renorms(nvert, Point3f(0, 0, 0));
+	std::vector<vcg::Color4b> recolors(nvert, Color4b(255, 255, 255, 255));
 	std::vector<uint32_t> reindex(nface*3);
 
 	QTime time;

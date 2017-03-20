@@ -53,6 +53,7 @@ NxzEncoder::NxzEncoder(uint32_t _nvert, uint32_t _nface, Stream::Entropy entropy
 	face.values.resize(nface*3);
 }
 
+//TODO optional checking for invalid (nan, infinity) values.
 
 /* TODO: euristic for point clouds should be: about 1/10 of nearest neighbor.
   for now just use volume and number of points
@@ -499,26 +500,7 @@ void NxzEncoder::encodeMesh() {
 	face.values.resize(count*3);
 	nface = count;
 
-	stream.write<int>(nvert);
-	stream.write<int>(nface);
-	stream.write<int>(groups.size());
-	for(uint32_t &end: groups)
-		stream.write<int>(end);
 
-	header_size = stream.elapsed();
-
-	if((flags & NORMAL) && normals_prediction != DIFF) {
-		computeNormals(norm.diffs);
-		if(normals_prediction == BORDER)
-			markBoundary(); //mark boundary points on original vertices.
-		for(uint32_t i = 0; i < nvert; i++) {
-			norm.values[i] -= norm.diffs[i];
-
-			Point2i dt = norm.values[i];
-			assert(abs(dt[0]) < (1<<25));
-			assert(abs(dt[1]) < (1<<25));
-		}
-	}
 
 	BitStream bitstream;
 	prediction.resize(nvert);
@@ -528,6 +510,27 @@ void NxzEncoder::encodeMesh() {
 		encodeFaces(start, end, bitstream);
 		start = end;
 	}
+#ifdef PRESERVED_UNREFERENCED
+	//encoding unreferenced vertices
+	for(uint32_t i = 0; i < nvert; i++) {
+		if(encoded[i] != -1)
+			continue;
+		int last = current_vertex-1;
+		prediction.emplace_back(Quad(i, last, last, last));
+		current_vertex++;
+	}
+#endif
+	cout << "Unreference vertices: " << nvert - current_vertex << " remaining: " << current_vertex << endl;
+	nvert = current_vertex;
+
+	stream.write<int>(nvert);
+	stream.write<int>(nface);
+	stream.write<int>(groups.size());
+	for(uint32_t &end: groups)
+		stream.write<int>(end);
+
+	header_size = stream.elapsed();
+
 
 	coord.diffs[0] = coord.values[prediction[0].t];
 	for(uint32_t i = 1; i < nvert; i++) {
@@ -536,6 +539,21 @@ void NxzEncoder::encodeMesh() {
 	}
 
 	if((flags & NORMAL)) {
+
+
+		if((flags & NORMAL) && normals_prediction != DIFF) {
+			computeNormals(norm.diffs);
+			if(normals_prediction == BORDER)
+				markBoundary(); //mark boundary points on original vertices.
+			for(uint32_t i = 0; i < nvert; i++) {
+				norm.values[i] -= norm.diffs[i];
+
+				Point2i dt = norm.values[i];
+				assert(abs(dt[0]) < (1<<25));
+				assert(abs(dt[1]) < (1<<25));
+			}
+		}
+
 		norm.diffs[0] = norm.values[prediction[0].t];
 		for(uint32_t i = 1; i < nvert; i++) {
 			Quad &q = prediction[i];
@@ -578,9 +596,6 @@ void NxzEncoder::encodeMesh() {
 			da.diffs[i] = da.values[q.t] - da.values[q.a];
 		}
 	}
-
-
-
 
 
 
