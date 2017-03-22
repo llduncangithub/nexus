@@ -188,7 +188,7 @@ public:
 	}
 
 
-	template <class T, int N> void encodeValues(uint32_t size, T *values) {
+	template <class T> void encodeValues(uint32_t size, T *values, int N) {
 		BitStream bitstream(size);
 		//Storing bitstream before logs, allows in decompression to allocate only 1 logs array and reuse it.
 		std::vector<uchar> clogs[N];
@@ -214,7 +214,7 @@ public:
 			compress(clogs[c].size(), &*clogs[c].begin());
 	}
 
-	template <class T, int N> int decodeValues(T *values) {
+	template <class T> int decodeValues(T *values, int N) {
 		BitStream bitstream;
 		read(bitstream);
 
@@ -241,7 +241,7 @@ public:
 	}
 
 
-	template <class T, int N> void encodeArray(uint32_t size, T *values) {
+	template <class T> void encodeArray(uint32_t size, T *values, int N) {
 		BitStream bitstream(size);
 		std::vector<uchar> logs(size);
 
@@ -264,7 +264,7 @@ public:
 		compress(logs.size(), &*logs.begin());
 	}
 
-	template <class T, int N> int decodeArray(T *values) {
+	template <class T> int decodeArray(T *values, int N) {
 		BitStream bitstream;
 		read(bitstream);
 

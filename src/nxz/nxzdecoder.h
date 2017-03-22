@@ -27,45 +27,53 @@ for more details.
 #include "../nxszip/fpu_precision.h"
 #include "zpoint.h"
 #include "nxz.h"
-
+#include "attribute.h"
+#include "color_attribute.h"
+#include "normal_attribute.h"
 
 namespace nx {
 
 class NxzDecoder {
 public:
 	uint32_t nvert, nface;
-	uint32_t flags;
+//	uint32_t flags;
 
-	Attribute<Point3i> coord;
+/*	Attribute<Point3i> coord;
 	Attribute<Point3i> norm;
 	Attribute<int> color[4];
-	Attribute<Point2i> uv;
+	Attribute<Point2i> uv; */
+
 	std::map<std::string, Attribute23 *> data;
-	Attribute<int> face;
+	Attribute<int> face; //turn this into a pointer: face32 and face16
 
 	Normals normals_prediction;
 	Stream stream;
 
 	NxzDecoder(int len, uchar *input);
-	bool hasNormals() { return flags & NORMAL; }
-	bool hasColors() { return flags & COLOR; }
-	bool hasUvs() { return flags & UV; }
-	bool hasIndex() { return flags & INDEX; }
 
-	void setCoords(float *buffer);
-	void setNormals(float *buffer);
-	void setNormals(int16_t *buffer);
-	void setColors(uchar *buffer);
-	void setUvs(float *buffer);
-	bool setAttribute(const char *name, char *buffer, Attribute23::Format format) {
+	bool hasAttr(const char *name) { return data.count(name); }
+
+	bool setPositions(float *buffer) { return setAttribute("position", buffer, Attribute23::FLOAT); }
+	bool setNormals(float *buffer)   { return setAttribute("normal", buffer, Attribute23::FLOAT); }
+	bool setNormals(int16_t *buffer) { return setAttribute("normal", buffer, Attribute23::INT16); }
+	bool setColors(uchar *buffer)    { return setAttribute("color", buffer, Attribute23::INT8); }
+	bool setUvs(float *buffer)       { return setAttribute("uv", buffer, Attribute23::FLOAT); }
+
+	bool setAttr(const char *name, char *buffer, Attribute23::Format format) {
 		if(data.find(name) == data.end()) return false;
 		Attribute23 *attr = data[name];
 		attr->format = format;
 		attr->buffer = buffer;
 		return true;
 	}
-	bool setAttribute(const char *name, Attribute23 *attr) {
+
+	bool setAttr(const char *name, char *buffer, Attribute23 *attr) {
 		if(data.find(name) == data.end()) return false;
+		Attribute23 *found = data[name];
+		if(found->id != attr->id)
+			return false;
+		attr->buffer = buffer;
+		delete data[name];
 		data[name] = attr;
 		return true;
 	}

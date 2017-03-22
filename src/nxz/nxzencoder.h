@@ -27,6 +27,9 @@ for more details.
 #include "cstream.h"
 #include "zpoint.h"
 #include "nxz.h"
+#include "attribute.h"
+#include "color_attribute.h"
+#include "normal_attribute.h"
 
 namespace nx {
 
@@ -50,6 +53,7 @@ public:
 	Stream stream;
 
 	NxzEncoder(uint32_t _nvert, uint32_t _nface = 0, Stream::Entropy entropy = Stream::TUNSTALL);
+
 	void addCoords(float *buffer, float q = 0, Point3f o = Point3f(FLT_MAX));
 	void addCoords(float *buffer, uint32_t *index, float q = 0, Point3f o = Point3f(FLT_MAX));
 	void addCoords(float *buffer, uint16_t *index, float q = 0, Point3f o = Point3f(FLT_MAX));
@@ -64,29 +68,23 @@ public:
 
 	void addUV(float *buffer, float q = 0);
 
-	void addAttribute(const char *name, char *buffer, float q, Attribute23::Format format, int components, uint32_t strate) {
-		if(data.count(name)) throw "Duplicate attribute";
-		Attribute23 *attr;
-		switch(components) {
-		case 1:	attr = new Data<int, 1>(q); break;
-		case 2:	attr = new Data<int, 2>(q); break;
-		case 3:	attr = new Data<int, 3>(q); break;
-		case 4:	attr = new Data<int, 4>(q); break;
-		default: //should use a non templated number of components...sigh.
-			throw "Too many components";
-		}
-		attr->components = components;
-		attr->strategy = strate;
+	bool addAttribute(const char *name, char *buffer, float q, Attribute23::Format format, int components, uint32_t strategy) {
+		if(data.count(name)) return false;
+		Attribute23 *attr = new GenericAttr<int>(components);
 
+		attr->q = q;
+		attr->strategy = strategy;
 		attr->format = format;
 		attr->quantize(nvert, (char *)buffer);
 		data[name] = attr;
+		return true;
 	}
 
-	void addAttribute(const char *name, char *buffer, Attribute23 *attr) {
-		if(data.count(name)) throw "Duplicate attribute";
+	bool addAttribute(const char *name, char *buffer, Attribute23 *attr) {
+		if(data.count(name)) return true;
 		attr->quantize(nvert, buffer);
 		data[name] = attr;
+		return true;
 	}
 
 	void addGroup(int end_triangle) { groups.push_back(end_triangle); }

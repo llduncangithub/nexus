@@ -45,7 +45,7 @@ NxzDecoder::NxzDecoder(int len, uchar *input):
 	flags = stream.read<int>();
 	stream.entropy = (Stream::Entropy)stream.read<uchar>();
 
-	coord.q = stream.read<float>();
+/*	coord.q = stream.read<float>();
 
 	if(flags & NORMAL) {
 		normals_prediction = (Normals)stream.read<uchar>();
@@ -58,29 +58,28 @@ NxzDecoder::NxzDecoder(int len, uchar *input):
 
 	if(flags & UV)
 		uv.q = stream.read<float>();
-
+*/
 
 	int nattr = stream.read<int>();
+
 	for(int i = 0; i < nattr; i++) {
+
 		std::string name =  stream.readString();
-		float q = stream.read<uchar>();
-		int components = stream.read<uchar>();
+		uint32_t id = stream.read<uint32_t>();
+		float q = stream.read<float>();
+		uint32_t components = stream.read<uchar>();
 		uint32_t strategy = stream.read<uchar>();
 
-		Attribute23 *attr;
-		if(name == "position" || components == 3)
-			attr = new Data<int, 3>(q);
-		else if(name == "normal")
-			attr = new Normal1(q);
-//		else if(name == "color")
-//			attr = new AttrColor(q);
-		else if(name == "uv")
-			attr = new Uv(q);
-		else if(components == 1)
-			attr = new Data<int, 1>(q);
-		else
-			throw "I don't know whatt to do";
-		attr->components = components;
+		Attribute23 *attr = nullptr;
+		switch(id) {
+		case 1: attr = new GenericAttr<int>(components); break;
+		case 2: attr = new NormalAttr(); break;
+		case 3: attr = new ColorAttr(); break;
+		default: attr = new GenericAttr<int>(components); break;
+		}
+
+		attr->id = id;
+		attr->q = q;
 		attr->strategy = strategy;
 		data[name] = attr;
 	}

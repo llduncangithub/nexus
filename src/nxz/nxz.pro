@@ -29,7 +29,10 @@ HEADERS += \
     bitstream.h \
     ../../../vcglib/wrap/ply/plylib.h \
     nxz.h \
-    cstream.h
+    cstream.h \
+    attribute.h \
+    color_attribute.h \
+    normal_attribute.h
 
 DISTFILES += \
     plan.md

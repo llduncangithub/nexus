@@ -288,7 +288,6 @@ void NxzEncoder::encode() {
 	for(auto it: data) {
 		stream.writeString(it.first.c_str());                //name
 		stream.write<uchar>(it.second->q);
-		stream.write<uchar>(it.second->components);
 		stream.write<uchar>(it.second->strategy);
 	}
 
