@@ -19,6 +19,7 @@ for more details.
 #define NXZ_ENCODER_H
 
 #include <vector>
+#include <map>
 
 #include <limits.h>
 #include <float.h>
@@ -38,8 +39,10 @@ public:
 	Attribute<Point2i> norm;
 	Attribute<unsigned char> color[4];
 	Attribute<Point2i> uv;
-	std::vector<Attribute<int>> data;
-	Attribute<int> face;
+	std::map<std::string, Attribute23 *> data;
+
+	std::vector<uint32_t> index;
+	int index_size;
 	int header_size;
 
 	Normals normals_prediction;
@@ -60,10 +63,31 @@ public:
 	void addColors(unsigned char *buffer, int lumabits = 6, int chromabits = 6, int alphabits = 5);
 
 	void addUV(float *buffer, float q = 0);
-	void addUV(int *buffer, float q = 0);
 
-	void addData(float *buffer, float q, float offset = 0);
-	void addData(int *buffer);
+	void addAttribute(const char *name, char *buffer, float q, Attribute23::Format format, int components, uint32_t strate) {
+		if(data.count(name)) throw "Duplicate attribute";
+		Attribute23 *attr;
+		switch(components) {
+		case 1:	attr = new Data<int, 1>(q); break;
+		case 2:	attr = new Data<int, 2>(q); break;
+		case 3:	attr = new Data<int, 3>(q); break;
+		case 4:	attr = new Data<int, 4>(q); break;
+		default: //should use a non templated number of components...sigh.
+			throw "Too many components";
+		}
+		attr->components = components;
+		attr->strategy = strate;
+
+		attr->format = format;
+		attr->quantize(nvert, (char *)buffer);
+		data[name] = attr;
+	}
+
+	void addAttribute(const char *name, char *buffer, Attribute23 *attr) {
+		if(data.count(name)) throw "Duplicate attribute";
+		attr->quantize(nvert, buffer);
+		data[name] = attr;
+	}
 
 	void addGroup(int end_triangle) { groups.push_back(end_triangle); }
 

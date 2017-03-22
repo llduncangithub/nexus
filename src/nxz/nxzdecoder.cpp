@@ -59,9 +59,36 @@ NxzDecoder::NxzDecoder(int len, uchar *input):
 	if(flags & UV)
 		uv.q = stream.read<float>();
 
-	data.resize(stream.read<int>());
-	for(auto &da: data)
-		da.q = stream.read<float>();
+
+	int nattr = stream.read<int>();
+	for(int i = 0; i < nattr; i++) {
+		std::string name =  stream.readString();
+		float q = stream.read<uchar>();
+		int components = stream.read<uchar>();
+		uint32_t strategy = stream.read<uchar>();
+
+		Attribute23 *attr;
+		if(name == "position" || components == 3)
+			attr = new Data<int, 3>(q);
+		else if(name == "normal")
+			attr = new Normal1(q);
+//		else if(name == "color")
+//			attr = new AttrColor(q);
+		else if(name == "uv")
+			attr = new Uv(q);
+		else if(components == 1)
+			attr = new Data<int, 1>(q);
+		else
+			throw "I don't know whatt to do";
+		attr->components = components;
+		attr->strategy = strategy;
+		data[name] = attr;
+	}
+
+
+
+//	data.resize(stream.read<int>(), nullptr);
+
 }
 
 void NxzDecoder::setCoords(float *buffer) { coord.buffer = buffer; }
@@ -78,7 +105,6 @@ void NxzDecoder::setColors(uchar *buffer) { color[0].buffer = buffer; }
 
 void NxzDecoder::setUvs(float *buffer) { uv.buffer = buffer; }
 
-void NxzDecoder::setData(int pos, float *buffer) { data[pos].buffer = buffer; }
 
 void NxzDecoder::setIndex(uint32_t *buffer) { face.buffer = buffer; }
 
@@ -220,18 +246,8 @@ void NxzDecoder::decodeUvs() {
 }
 
 void NxzDecoder::decodeDatas() {
-	for(auto &da: data) {
-		std::vector<uchar> diffs;
-		stream.decompress(diffs);
-
-		BitStream bitstream;
-		stream.read(bitstream);
-
-		if(!da.buffer) continue;
-		int *d = (int *)da.buffer;
-		for(uint32_t i = 0; i < nvert; i++)
-			d[i] = decodeDiff(diffs[i], bitstream);
-	}
+	for(auto it: data)
+		it.second->decode(nvert, stream);
 }
 
 
@@ -291,6 +307,8 @@ void NxzDecoder::dequantize() {
 				c[k] *= (int)color[k].q;
 		}
 	}
+	for(auto it: data)
+		it.second->dequantize(nvert);
 }
 
 
@@ -450,14 +468,8 @@ void NxzDecoder::decodeMesh() {
 		}
 	}
 
-	for(auto &da: data) {
-		int *buffer =((int *)da.buffer);
-		if(!buffer) continue;
-		for(uint32_t i = 1; i < nvert; i++) {
-			Face &f = prediction[i];
-			buffer[i] += buffer[f.a];
-		}
-	}
+	for(auto it: data)
+		it.second->deltaDecode(prediction);
 
 	dequantize();
 }
@@ -624,7 +636,7 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 
 int NxzDecoder::decodeVertex(int v0, int v1, int v2) {
 
-	uint32_t v = vertex_count++;
+/*	uint32_t v = vertex_count++;
 	assert(v < nvert);
 
 	if(v0 == -1) //first vertex of component. nothing to do.
@@ -672,7 +684,7 @@ int NxzDecoder::decodeVertex(int v0, int v1, int v2) {
 		d += ((int *)da.buffer)[v0];
 	}
 
-	return v;
+	return v; */
 }
 
 

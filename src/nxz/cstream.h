@@ -25,6 +25,8 @@ for more details.
 
 typedef unsigned char uchar;
 
+using namespace std;
+
 namespace nx {
 
 
@@ -96,6 +98,12 @@ public:
 		push(c, bytes);
 	}
 
+	void writeString(const char *str) {
+		int bytes = strlen(str)+1;
+		write<uint16_t>(bytes);
+		push(str, bytes);
+	}
+
 	void write(BitStream &stream) {
 		stream.flush();
 		//padding to 32 bit is needed for javascript reading (which uses int words.), mem needs to be aligned.
@@ -108,6 +116,7 @@ public:
 		pos += pad;
 		push(stream.buffer, stream.size*sizeof(uint64_t));
 	}
+
 
 	template<class T> T read() {
 		T c;
@@ -122,6 +131,12 @@ public:
 		pos += bytes;
 		return buffer;
 	}
+
+	char *readString() {
+		int bytes = read<uint16_t>();
+		return readArray<char>(bytes);
+	}
+
 
 	void read(BitStream &stream) {
 		int s = read<int>();
@@ -150,7 +165,7 @@ public:
 		}
 	}
 
-	void push(void *b, int s) {
+	void push(const void *b, int s) {
 		grow(s);
 		memcpy(pos, b, s);
 		pos += s;
@@ -166,6 +181,123 @@ public:
 		return n;
 	}
 
+	static int ilog2(uint64_t p) {
+		int k = 0;
+		while ( p>>=1 ) { ++k; }
+		return k;
+	}
+
+
+	template <class T, int N> void encodeValues(uint32_t size, T *values) {
+		BitStream bitstream(size);
+		//Storing bitstream before logs, allows in decompression to allocate only 1 logs array and reuse it.
+		std::vector<uchar> clogs[N];
+		for(uint32_t c = 0; c < N; c++) {
+			auto &logs = clogs[c];
+			logs.resize(size);
+			for(uint32_t i = 0; i < size; i++) {
+				int val = values[i*N + c];
+				if(val == 0) {
+					logs[i] = 0;
+					continue;
+				}
+				int ret = ilog2(abs(val)) + 1;  //0 -> 0, [1,-1] -> 1 [-2,-3,2,3] -> 2
+				logs[i] = ret;
+				int middle = (1<<ret)>>1;
+				if(val < 0) val = -val -middle;
+				bitstream.writeUint(val, ret);
+			}
+		}
+
+		write(bitstream);
+		for(uint32_t c = 0; c < N; c++)
+			compress(clogs[c].size(), &*clogs[c].begin());
+	}
+
+	template <class T, int N> int decodeValues(T *values) {
+		BitStream bitstream;
+		read(bitstream);
+
+		std::vector<uchar> logs;
+
+		for(uint32_t c = 0; c < N; c++) {
+			decompress(logs);
+
+			for(uint32_t i = 0; i < logs.size(); i++) {
+				uchar &diff = logs[i];
+				if(diff == 0) {
+					values[i*N + c] = 0;
+					continue;
+				}
+
+				int val = bitstream.readUint(diff);
+				int middle = 1<<(diff-1);
+				if(val < middle)
+					val = -val -middle;
+				values[i] = val;
+			}
+		}
+		return logs.size();
+	}
+
+
+	template <class T, int N> void encodeArray(uint32_t size, T *values) {
+		BitStream bitstream(size);
+		std::vector<uchar> logs(size);
+
+		for(uint32_t i = 0; i < size; i++) {
+			T *p = values + i*N;
+			int diff = needed(p[0]);
+			for(uint32_t c = 1; c < N; c++) {
+				int d = needed(p[c]);
+				if(diff < d) diff = d;
+			}
+			logs[i] = diff;
+			if(diff == 0) continue;
+
+			int max = 1<<(diff-1);
+			for(uint32_t c = 0; c < N; c++)
+				bitstream.writeUint(p[c] + max, diff);
+		}
+
+		write(bitstream);
+		compress(logs.size(), &*logs.begin());
+	}
+
+	template <class T, int N> int decodeArray(T *values) {
+		BitStream bitstream;
+		read(bitstream);
+
+		std::vector<uchar> logs;
+		decompress(logs);
+
+		for(uint32_t i =0; i < logs.size(); i++) {
+			T *p = values + i*N;
+			uchar &diff = logs[i];
+			if(diff == 0) {
+				for(uint32_t c = 0; c < N; c++)
+					p[c] = 0;
+				continue;
+			}
+			//making a single read is 2/3 faster
+			//uint64_t &max = bmax[diff];
+			const uint64_t max = (1<<diff)>>1;
+			if(diff < 22) {
+				//uint64_t &mask = bmask[diff]; //using table is 4% faster
+				const uint64_t mask = (1<<diff)-1;
+				uint64_t bits = bitstream.readUint(N*diff);
+				for(uint32_t i = N-1; i > 0; i--) {
+					p[i] = (bits & mask) - max;
+					bits >>= diff;
+				}
+				p[0] = bits - max;
+			} else {
+				for(uint32_t c = 0; c < N; c++)
+					p[c] = bitstream.readUint(diff) - max;
+			}
+		}
+		return logs.size();
+	}
 };
 
 } //namespace

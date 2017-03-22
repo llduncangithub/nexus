@@ -22,9 +22,6 @@ public:
 	S &operator[](int k) { return v[k]; }
 	const S &operator[](int k) const { return v[k]; }
 
-	void operator=(const Point2<float> &p) { v[0] = (S)p[0]; v[1] = (S)p[1]; }
-
-
 	bool operator==(const Point2 &c) const { return v[0] == c(0) && v[1] == c(1); }
 	bool operator!=(const Point2 &c) const { return v[0] != c(0) || v[1] != c(1); }
 	bool operator<(const Point2 &c) const {
@@ -89,8 +86,6 @@ public:
 	Point3(S x, S y, S z) { v[0] = x; v[1] = y; v[2] = z; }
 	Point3(S *x) { v[0] = x[0]; v[1] = x[1]; v[2] = x[2]; }
 	explicit Point3(S x) { v[0] = v[1] = v[2] = x; }
-	//explicit Point3(Point3<float> &p) { v[0] = (S)p[0]; v[1] = (S)p[1]; v[2] = (S)p[2]; }
-	void operator=(const Point3<float> &p) { v[0] = (S)p[0]; v[1] = (S)p[1]; v[2] = (S)p[2]; }
 
 	S &operator[](int k) { return v[k]; }
 	const S &operator[](int k) const { return v[k]; }
@@ -171,6 +166,12 @@ public:
 
 	S &operator[](int k) { return v[k]; }
 	const S &operator[](int k) const { return v[k]; }
+
+	Point4 operator+(const Point4 &c) const { return Point4(v[0] + c[0], v[1] + c[1], v[2] + c[2], v[3] + c[3]); }
+	Point4 operator-(const Point4 &c) const { return Point4(v[0] - c[0], v[1] - c[1], v[2] - c[2], v[3] + c[3]); }
+	Point4 operator*(S c) const { return Point4(v[0]*c, v[1]*c, v[2]*c, v[3]*c); }
+	Point4 operator/(S c) const { return Point4(v[0]/c, v[1]/c, v[2]/c, v[3]/c); }
+
 	Point4 &operator-=(const Point4 &c) {
 		v[0] -= c[0];
 		v[1] -= c[1];

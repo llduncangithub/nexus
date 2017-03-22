@@ -19,6 +19,7 @@ for more details.
 #define NXZ_DECODER_H
 
 #include <vector>
+#include <map>
 #include <algorithm>
 
 #include "cstream.h"
@@ -32,14 +33,14 @@ namespace nx {
 
 class NxzDecoder {
 public:
-	uint32_t flags; //keeps track of what is inside
 	uint32_t nvert, nface;
+	uint32_t flags;
 
 	Attribute<Point3i> coord;
 	Attribute<Point3i> norm;
 	Attribute<int> color[4];
 	Attribute<Point2i> uv;
-	std::vector<Attribute<int>> data;
+	std::map<std::string, Attribute23 *> data;
 	Attribute<int> face;
 
 	Normals normals_prediction;
@@ -49,7 +50,6 @@ public:
 	bool hasNormals() { return flags & NORMAL; }
 	bool hasColors() { return flags & COLOR; }
 	bool hasUvs() { return flags & UV; }
-	bool dataCount() { return data.size(); }
 	bool hasIndex() { return flags & INDEX; }
 
 	void setCoords(float *buffer);
@@ -57,7 +57,19 @@ public:
 	void setNormals(int16_t *buffer);
 	void setColors(uchar *buffer);
 	void setUvs(float *buffer);
-	void setData(int pos, float *buffer);
+	bool setAttribute(const char *name, char *buffer, Attribute23::Format format) {
+		if(data.find(name) == data.end()) return false;
+		Attribute23 *attr = data[name];
+		attr->format = format;
+		attr->buffer = buffer;
+		return true;
+	}
+	bool setAttribute(const char *name, Attribute23 *attr) {
+		if(data.find(name) == data.end()) return false;
+		data[name] = attr;
+		return true;
+	}
+
 	void setIndex(uint32_t *buffer);
 	void setIndex(int16_t *buffer);
 

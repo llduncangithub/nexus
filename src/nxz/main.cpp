@@ -64,7 +64,10 @@ int main(int argc, char *argv[]) {
 //	encoder.addCoords((float *)&*coords.begin());
 
 	nx::NxzEncoder encoder(nvert, nface, nx::Stream::TUNSTALL);
-	encoder.addCoords((float *)&*coords.begin(), &*index.begin());
+	encoder.addCoords((float *)&*coords.begin(), &*index.begin(), 0.0632463f);
+	encoder.addAttribute("recoord", (char *)&*coords.begin(), 0.0632463f,
+						 nx::Attribute23::FLOAT, 3, nx::Attribute23::PARALLEL | nx::Attribute23::CORRELATED);
+
 //	encoder.addNormals((float *)&*normals.begin(), 10, nx::DIFF);
 //	encoder.addColors((unsigned char *)&*colors.begin());
 	encoder.encode();
@@ -95,12 +98,14 @@ int main(int argc, char *argv[]) {
 		 << encoder.color[3].q << " " << endl << endl;
 
 
-	cout << "Face bpv; " << 8.0f*encoder.face.size/nvert << endl;
+	cout << "Face bpv; " << 8.0f*encoder.index_size/nvert << endl;
 
 	std::vector<vcg::Point3f> recoords(nvert);
 	std::vector<vcg::Point3f> renorms(nvert, Point3f(0, 0, 0));
 	std::vector<vcg::Color4b> recolors(nvert, Color4b(255, 255, 255, 255));
 	std::vector<uint32_t> reindex(nface*3);
+	std::vector<vcg::Point3f> redata(nvert);
+
 
 	QTime time;
 	time.start();
@@ -109,11 +114,19 @@ int main(int argc, char *argv[]) {
 	for(int i = 0; i < iter; i++) {
 		nx::NxzDecoder decoder(encoder.stream.size(), encoder.stream.data());
 		decoder.setCoords((float *)&*recoords.begin());
+		decoder.setAttribute("recoord", (char *)&*redata.begin(), nx::Attribute23::FLOAT);
+//		decoder.setData(0, &data, (char *)&*redata.begin());
 //		decoder.setNormals((float *)&*renorms.begin());
 //		decoder.setColors((uchar *)&*recolors.begin());
 		decoder.setIndex(&*reindex.begin());
 		decoder.decode();
 	}
+
+	/*
+	for(uint32_t i = 0; i < recoords.size(); i++) {
+		if(recoords[i] != redata[i] && i < 10)
+			cout << "Different: " << recoords[i][0] << " " << redata[i][0] << endl;
+	} */
 
 	int delta = time.elapsed();
 	if(nface) {

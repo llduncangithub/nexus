@@ -16,9 +16,9 @@ static int needed(int a) {
 	while(a >>= 1) n++;
 	return n;
 }
-
+/*
 //T can be char, short, int
-void encodeDiffs(Stream &stream, uint32_t size, int *values) {
+void nx::encodeDiff(Stream &stream, uint32_t size, int *values) {
 	std::vector<uchar> logs(size);
 	BitStream bitstream(size);
 
@@ -38,29 +38,7 @@ void encodeDiffs(Stream &stream, uint32_t size, int *values) {
 	stream.write(bitstream);
 }
 
-//T can be char, short, int
-void encodeDiff(Stream &stream, uint32_t size, short *values) {
-	std::vector<uchar> logs(size);
-	BitStream bitstream(size);
-
-	for(uint32_t i = 0; i < size; i++) {
-		short &val = values[i];
-		if(val == 0) {
-			logs[i] = 0;
-			continue;
-		}
-		int ret = ilog2(abs(val)) + 1;  //0 -> 0, [1,-1] -> 1 [-2,-3,2,3] -> 2
-		logs[i] = ret;
-		int middle = (1<<ret)>>1;
-		if(val < 0) val = -val -middle;
-		bitstream.writeUint(val, ret);
-	}
-	stream.compress(logs.size(), &*logs.begin());
-	stream.write(bitstream);
-}
-
-
-void encodeDiff(Stream &stream, uint32_t size, Point2i *values) {
+void nx::encodeDiff(Stream &stream, uint32_t size, Point2i *values) {
 	std::vector<uchar> logs(size);
 	BitStream bitstream(size);
 
@@ -79,26 +57,7 @@ void encodeDiff(Stream &stream, uint32_t size, Point2i *values) {
 	stream.write(bitstream);
 }
 
-void encodeDiff(Stream &stream, uint32_t size, Point2s *values) {
-	std::vector<uchar> logs(size);
-	BitStream bitstream(size);
-
-	for(uint32_t i = 0; i < size; i++) {
-		Point2s &p = values[i];
-
-		int diff = std::max(needed(p[0]), needed(p[1]));
-		logs[i] = diff;
-		if(diff == 0) continue;
-
-		int max = 1<<(diff-1);
-		bitstream.writeUint(p[0] + max, diff);
-		bitstream.writeUint(p[1] + max, diff);
-	}
-	stream.compress(logs.size(), &*logs.begin());
-	stream.write(bitstream);
-}
-
-void encodeDiff(Stream &stream, uint32_t size, Point3i *values) {
+void nx::encodeDiff(Stream &stream, uint32_t size, Point3i *values) {
 	std::vector<uchar> logs(size);
 	BitStream bitstream(size);
 
@@ -137,7 +96,7 @@ const uint64_t bmax[] = { 0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024,
 						  1<<21, 1<<22, 1<<23, 1<<24, 1<<25, 1<<26, 1<<27, 1<<28, 1<<29, 1<<30 };
 
 
-int decodeDiff(Stream &stream, int *values) {
+int nx::decodeDiff(Stream &stream, int *values) {
 	std::vector<uchar> diffs;
 	stream.decompress(diffs);
 	BitStream bitstream;
@@ -159,7 +118,7 @@ int decodeDiff(Stream &stream, int *values) {
 	return diffs.size();
 }
 
-int decodeDiff(Stream &stream, Point2i *values) {
+int nx::decodeDiff(Stream &stream, Point2i *values) {
 	std::vector<uchar> diffs;
 	stream.decompress(diffs);
 	BitStream bitstream;
@@ -190,39 +149,9 @@ int decodeDiff(Stream &stream, Point2i *values) {
 	return diffs.size();
 }
 
-int decodeDiff(Stream &stream, Point2s *values) {
-	std::vector<uchar> diffs;
-	stream.decompress(diffs);
-	BitStream bitstream;
-	stream.read(bitstream);
-
-	for(uint32_t i =0; i < diffs.size(); i++) {
-		Point2s &p = values[i];
-		uchar &diff = diffs[i];
-		if(diff == 0) {
-			p[0] = p[1] =0;
-			continue;
-		}
-
-		const uint64_t &max = bmax[diff];
-//		uint64_t max = (1<<diff)>>1;
-		if(diff < 22) {
-			const uint64_t &mask = bmask[diff];
-			//uint64_t mask = (1<<diff)-1;
-			uint64_t bits = bitstream.readUint(2*diff);
-			p[1] = (bits & mask) - max;
-			bits >>= diff;
-			p[0] = bits - max;
-		} else {
-			p[0] = bitstream.readUint(diff) - max;
-			p[1] = bitstream.readUint(diff) - max;
-		}
-	}
-	return diffs.size();
-}
 
 
-int decodeDiff(Stream &stream, Point3i *values) {
+int nx::decodeDiff(Stream &stream, Point3i *values) {
 	std::vector<uchar> diffs;
 	stream.decompress(diffs);
 	BitStream bitstream;
@@ -255,38 +184,4 @@ int decodeDiff(Stream &stream, Point3i *values) {
 	}
 	return diffs.size();
 }
-
-int decodeDiff(Stream &stream, Point3s *values) {
-	std::vector<uchar> diffs;
-	stream.decompress(diffs);
-	BitStream bitstream;
-	stream.read(bitstream);
-
-	for(uint32_t i =0; i < diffs.size(); i++) {
-		Point3s &p = values[i];
-		uchar &diff = diffs[i];
-		if(diff == 0) {
-			p[0] = p[1] = p[2] = 0;
-			continue;
-		}
-		//making a single read is 2/3 faster
-		//uint64_t &max = bmax[diff];
-		const uint64_t max = (1<<diff)>>1;
-		if(diff < 22) {
-			//uint64_t &mask = bmask[diff]; //using table is 4% faster
-			const uint64_t mask = (1<<diff)-1;
-			uint64_t bits = bitstream.readUint(3*diff);
-			p[2] = (bits & mask) - max;
-			bits >>= diff;
-			p[1] = (bits & mask) - max;
-			bits >>= diff;
-			p[0] = bits - max;
-		} else {
-			p[0] = bitstream.readUint(diff) - max;
-			p[1] = bitstream.readUint(diff) - max;
-			p[2] = bitstream.readUint(diff) - max;
-		}
-	}
-	return diffs.size();
-}
-
+*/
