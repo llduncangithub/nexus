@@ -2,6 +2,7 @@
 
 using namespace nx;
 
+/*
 static int ilog2(uint64_t p) {
 	int k = 0;
 	while ( p>>=1 ) { ++k; }
@@ -16,8 +17,9 @@ static int needed(int a) {
 	while(a >>= 1) n++;
 	return n;
 }
-/*
+ */
 //T can be char, short, int
+/*
 void nx::encodeDiff(Stream &stream, uint32_t size, int *values) {
 	std::vector<uchar> logs(size);
 	BitStream bitstream(size);

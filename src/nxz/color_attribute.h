@@ -72,7 +72,6 @@ public:
 		{
 			std::vector<Color4b> colors(nvert);
 			memcpy(&*colors.begin(), buffer, nvert*sizeof(Color4b));
-			float *output = (float *)buffer;
 			for(uint32_t i = 0; i < nvert; i++) {
 				Color4b &c = colors[i];
 				c = c.toRGB();

@@ -41,8 +41,6 @@ NxzDecoder::NxzDecoder(int len, uchar *input):
 	short_normals(false), short_index(false), vertex_count(0) {
 
 	stream.init(len, input);
-
-	flags = stream.read<int>();
 	stream.entropy = (Stream::Entropy)stream.read<uchar>();
 
 /*	coord.q = stream.read<float>();
@@ -65,20 +63,20 @@ NxzDecoder::NxzDecoder(int len, uchar *input):
 	for(int i = 0; i < nattr; i++) {
 
 		std::string name =  stream.readString();
-		uint32_t id = stream.read<uint32_t>();
 		float q = stream.read<float>();
 		uint32_t components = stream.read<uchar>();
 		uint32_t strategy = stream.read<uchar>();
 
 		Attribute23 *attr = nullptr;
-		switch(id) {
-		case 1: attr = new GenericAttr<int>(components); break;
-		case 2: attr = new NormalAttr(); break;
-		case 3: attr = new ColorAttr(); break;
-		default: attr = new GenericAttr<int>(components); break;
-		}
+		if(name == "position")
+			attr = new GenericAttr<int>(components);
+		else if(name == "normal")
+			attr = new NormalAttr();
+		else if(name == "color")
+			attr = new ColorAttr();
+		else if(name == " uv")
+			attr = new GenericAttr<int>(components);
 
-		attr->id = id;
 		attr->q = q;
 		attr->strategy = strategy;
 		data[name] = attr;
@@ -90,39 +88,26 @@ NxzDecoder::NxzDecoder(int len, uchar *input):
 
 }
 
-void NxzDecoder::setCoords(float *buffer) { coord.buffer = buffer; }
-
-void NxzDecoder::setNormals(float *buffer) { norm.buffer = buffer; }
-
-
-void NxzDecoder::setNormals(int16_t *buffer) {
-	norm.buffer = buffer;
-	short_normals = true;
-}
-
-void NxzDecoder::setColors(uchar *buffer) { color[0].buffer = buffer; }
-
-void NxzDecoder::setUvs(float *buffer) { uv.buffer = buffer; }
-
-
-void NxzDecoder::setIndex(uint32_t *buffer) { face.buffer = buffer; }
-
-void NxzDecoder::setIndex(int16_t *buffer) {
-	face.buffer = buffer;
-	short_index = true;
-}
-
 void NxzDecoder::decode() {
-	if(flags & INDEX)
+	nface = stream.read<uint32_t>();
+	nvert = stream.read<uint32_t>();
+
+	if(nface > 0)
 		decodeMesh();
 	else
 		decodePointCloud();
-
 }
 
 void NxzDecoder::decodePointCloud() {
 	nvert = stream.read<int>();
 
+	std::vector<nx::Face> dummy;
+	for(auto it: data) {
+		it.second->decode(nvert, stream);
+		it.second->deltaDecode(nvert, dummy);
+		it.second->dequantize(nvert);
+	}
+/*
 	decodeZPoints();
 
 	if(flags & NORMAL)
@@ -135,9 +120,9 @@ void NxzDecoder::decodePointCloud() {
 		decodeUvs();
 
 	if(flags & DATA)
-		decodeDatas();
+		decodeDatas(); */
 }
-
+/*
 void NxzDecoder::decodeZPoints() {
 	std::vector<uchar> diffs;
 	stream.decompress(diffs);
@@ -154,7 +139,7 @@ void NxzDecoder::decodeZPoints() {
 		decodeDiff(diffs[i], bitstream, coordi[i]);
 		last += coordi[i];
 		coordf[i] = Point3f(last[0]*coord.q, last[1]*coord.q, last[2]*coord.q);
-	}
+	} */
 /*
 	Zpoint encoding gain 1 bit (because we know it's sorted: diffs are positive!, but it's 3/2 slower and limited to 22 bits precision.
 
@@ -170,8 +155,8 @@ void NxzDecoder::decodeZPoints() {
 		coords[i] = coords[0] + p.toPoint(coord.q);
 	}
 	*/
-}
-
+//}
+/*
 void NxzDecoder::decodeCoords() {
 	std::vector<uchar> diffs;
 	stream.decompress(diffs);
@@ -247,9 +232,9 @@ void NxzDecoder::decodeUvs() {
 void NxzDecoder::decodeDatas() {
 	for(auto it: data)
 		it.second->decode(nvert, stream);
-}
+} */
 
-
+/*
 void NxzDecoder::dequantize() {
 	if(flags & INDEX) {
 		Point3i *coords = (Point3i *)coord.buffer;
@@ -308,9 +293,9 @@ void NxzDecoder::dequantize() {
 	}
 	for(auto it: data)
 		it.second->dequantize(nvert);
-}
+} */
 
-
+/*
 template <class F>
 void integrateNormals(int nface, F *index, Point3f *coords, Point3f *normals) {
 	for(int i = 0; i < nface; i++) {
@@ -374,7 +359,7 @@ void NxzDecoder::computeNormals(Point3f *normals, Point3f *estimated) {
 		} else //no correction
 			n = e;
 	}
-}
+} */
 
 void NxzDecoder::decodeMesh() {
 	nvert = stream.read<int>();
@@ -387,6 +372,7 @@ void NxzDecoder::decodeMesh() {
 	BitStream bitstream;
 	stream.read(bitstream);
 
+	/*
 	decodeCoords();
 
 	//HERE I NEED THE NORMALS FOR THE BORDER! SIGH
@@ -397,9 +383,13 @@ void NxzDecoder::decodeMesh() {
 		decodeColors();
 
 	if(flags & UV)
-		decodeUvs();
+		decodeUvs(); */
 
-	decodeDatas();
+	//decodeDatas();
+
+
+	for(auto it: data)
+		it.second->decode(nvert, stream);
 
 	prediction.resize(nvert);
 
@@ -417,7 +407,9 @@ void NxzDecoder::decodeMesh() {
 	}
 #endif
 
-	Point3i *coords = (Point3i *)coord.buffer;
+
+
+/*	Point3i *coords = (Point3i *)coord.buffer;
 	for(uint32_t i = 1; i < nvert; i++) {
 		Face &f = prediction[i];
 		coords[i] += coords[f.a] + coords[f.b] - coords[f.c];
@@ -465,12 +457,14 @@ void NxzDecoder::decodeMesh() {
 			Color4b &c = ((Color4b *)color[0].buffer)[i];
 			c += ((Color4b *)color[0].buffer)[f.a];
 		}
-	}
+	} */
 
 	for(auto it: data)
-		it.second->deltaDecode(prediction);
+		it.second->deltaDecode(nvert, prediction);
 
-	dequantize();
+	for(auto it: data)
+		it.second->dequantize(nvert);
+//	dequantize();
 }
 
 static int ilog2(uint64_t p) {

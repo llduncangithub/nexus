@@ -204,37 +204,7 @@ Point3i lroundf(Point3f &p) { return Point3i(::lroundf(p[0]), ::lroundf(p[1]), :
 /* mapping sphere to octahedron */
 class Normal {
 public:
-	static Point2i encode(Point3f v, int unit) {
-		Point2f p(v[0], v[1]);
-		p /= (fabs(v[0]) + fabs(v[1]) + fabs(v[2]));
 
-		if(v[2] < 0) {
-			p = Point2f(1.0f - fabs(p[1]), 1.0f - fabs(p[0]));
-			if(v[0] < 0) p[0] = -p[0];
-			if(v[1] < 0) p[1] = -p[1];
-		}
-		return Point2i(p[0]*unit, p[1]*unit);
-	}
-
-	static Point3f decode(Point2i v, int unit) {
-		Point3f n(v[0], v[1], unit - abs(v[0]) -abs(v[1]));
-		if (n[2] < 0) {
-			n[0] = ((v[0] > 0)? 1 : -1)*(unit - abs(v[1]));
-			n[1] = ((v[1] > 0)? 1 : -1)*(unit - abs(v[0]));
-		}
-		n /= n.norm();
-		return n;
-	}
-
-	static Point3s decode(Point2s v, int unit) {
-		Point3f n(v[0], v[1], unit - abs(v[0]) -abs(v[1]));
-		if (n[2] < 0) {
-			n[0] = ((v[0] > 0)? 1 : -1)*(unit - abs(v[1]));
-			n[1] = ((v[1] > 0)? 1 : -1)*(unit - abs(v[0]));
-		}
-		n /= n.norm();
-		return Point3s(n[0]*32767, n[1]*32767, n[2]*32767);
-	}
 };
 
 } //namespace

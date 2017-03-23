@@ -46,20 +46,20 @@ public:
 	std::map<std::string, Attribute23 *> data;
 	Attribute<int> face; //turn this into a pointer: face32 and face16
 
-	Normals normals_prediction;
+//	Normals normals_prediction;
 	Stream stream;
 
 	NxzDecoder(int len, uchar *input);
 
 	bool hasAttr(const char *name) { return data.count(name); }
 
-	bool setPositions(float *buffer) { return setAttribute("position", buffer, Attribute23::FLOAT); }
-	bool setNormals(float *buffer)   { return setAttribute("normal", buffer, Attribute23::FLOAT); }
-	bool setNormals(int16_t *buffer) { return setAttribute("normal", buffer, Attribute23::INT16); }
-	bool setColors(uchar *buffer)    { return setAttribute("color", buffer, Attribute23::INT8); }
-	bool setUvs(float *buffer)       { return setAttribute("uv", buffer, Attribute23::FLOAT); }
+	bool setPositions(float *buffer) { return setAttribute("position", (char *)buffer, Attribute23::FLOAT); }
+	bool setNormals(float *buffer)   { return setAttribute("normal", (char *)buffer, Attribute23::FLOAT); }
+	bool setNormals(int16_t *buffer) { return setAttribute("normal", (char *)buffer, Attribute23::INT16); }
+	bool setColors(uchar *buffer)    { return setAttribute("color", (char *)buffer, Attribute23::INT8); }
+	bool setUvs(float *buffer)       { return setAttribute("uv", (char *)buffer, Attribute23::FLOAT); }
 
-	bool setAttr(const char *name, char *buffer, Attribute23::Format format) {
+	bool setAttribute(const char *name, char *buffer, Attribute23::Format format) {
 		if(data.find(name) == data.end()) return false;
 		Attribute23 *attr = data[name];
 		attr->format = format;
@@ -67,19 +67,23 @@ public:
 		return true;
 	}
 
-	bool setAttr(const char *name, char *buffer, Attribute23 *attr) {
+	bool setAttribute(const char *name, char *buffer, Attribute23 *attr) {
 		if(data.find(name) == data.end()) return false;
 		Attribute23 *found = data[name];
-		if(found->id != attr->id)
-			return false;
+		attr->q = found->q;
+		attr->strategy = found->strategy;
+		attr->N = found->N;
 		attr->buffer = buffer;
 		delete data[name];
 		data[name] = attr;
 		return true;
 	}
 
-	void setIndex(uint32_t *buffer);
-	void setIndex(int16_t *buffer);
+	void setIndex(uint32_t *buffer) {face.buffer = buffer; }
+	void setIndex(int16_t *buffer) {
+		face.buffer = buffer;
+		short_index = true;
+	}
 
 /*	template <class T> void setAttribute(int n, T *buffer);
 	template <class T> void setAttribute(int n, Attribute *a, T *buffer); */
@@ -89,7 +93,7 @@ public:
 private:
 	bool short_normals;
 	bool short_index;
-	std::vector<bool> boundary;
+	//std::vector<bool> boundary;
 	std::vector<uint32_t> groups;
 	std::vector<uchar> clers;
 
@@ -131,6 +135,7 @@ private:
 	void dequantize();
 };
 
+/*
 template <class F> void NxzDecoder::markBoundary() {
 	boundary.resize(nvert, false);
 
@@ -146,7 +151,7 @@ template <class F> void NxzDecoder::markBoundary() {
 		if(count[i] != 0)
 			boundary[i] = true;
 }
-
+*/
 
 
 } //namespace

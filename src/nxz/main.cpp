@@ -64,9 +64,10 @@ int main(int argc, char *argv[]) {
 //	encoder.addCoords((float *)&*coords.begin());
 
 	nx::NxzEncoder encoder(nvert, nface, nx::Stream::TUNSTALL);
-	encoder.addCoords((float *)&*coords.begin(), &*index.begin(), 0.0632463f);
-	encoder.addAttribute("recoord", (char *)&*coords.begin(), 0.0632463f,
-						 nx::Attribute23::FLOAT, 3, nx::Attribute23::PARALLEL | nx::Attribute23::CORRELATED);
+	encoder.addPositions((nx::Point3f *)&*coords.begin(), &*index.begin(), 0.0632463f);
+	encoder.addAttribute("recoord", (char *)&*coords.begin(),
+						 nx::Attribute23::FLOAT, 3, 0.0632463f,
+						 nx::Attribute23::PARALLEL | nx::Attribute23::CORRELATED);
 
 //	encoder.addNormals((float *)&*normals.begin(), 10, nx::DIFF);
 //	encoder.addColors((unsigned char *)&*colors.begin());
@@ -82,20 +83,21 @@ int main(int argc, char *argv[]) {
 
 	cout << "Header: " << encoder.header_size << " bpv: " << (float)encoder.header_size/nvert << endl;
 
-	cout << "Coord bpv; " << 8.0f*encoder.coord.size/nvert << endl;
-	cout << "Coord q: " << encoder.coord.q << endl << endl;
+	nx::Attribute23 *coord = encoder.data["position"];
+	cout << "Coord bpv; " << 8.0f*coord->size/nvert << endl;
+	cout << "Coord q: " << coord->q << endl << endl;
 
-	cout << "Normal bpv; " << 8.0f*encoder.norm.size/nvert << endl;
-	cout << "Normal q: " << encoder.norm.q << endl << endl;
+	nx::Attribute23 *norm = encoder.data["normal"];
+	if(norm) {
+		cout << "Normal bpv; " << 8.0f*norm->size/nvert << endl;
+		cout << "Normal q: " << norm->q << endl << endl;
+	}
 
-	cout << "Color LCCA bpv; " << 8.0f*encoder.color[0].size/nvert << " "
-			<< 8.0f*encoder.color[1].size/nvert << " "
-			<< 8.0f*encoder.color[2].size/nvert << " "
-			<< 8.0f*encoder.color[3].size/nvert << " " << endl;
-	cout << "Color LCCA q: " << encoder.color[0].q << " "
-		 << encoder.color[1].q << " "
-		 << encoder.color[2].q << " "
-		 << encoder.color[3].q << " " << endl << endl;
+	nx::ColorAttr *color = dynamic_cast<nx::ColorAttr *>(encoder.data["color"]);
+	if(color) {
+		cout << "Color LCCA bpv; " << 8.0f*color->size/nvert << endl;
+		cout << "Color LCCA q: " << color->qc[0] << " " << color->qc[1] << " " << color->qc[2] << " " << color->qc[3] << endl << endl;
+	}
 
 
 	cout << "Face bpv; " << 8.0f*encoder.index_size/nvert << endl;
@@ -113,8 +115,8 @@ int main(int argc, char *argv[]) {
 	int iter = 20;
 	for(int i = 0; i < iter; i++) {
 		nx::NxzDecoder decoder(encoder.stream.size(), encoder.stream.data());
-		decoder.setCoords((float *)&*recoords.begin());
-		decoder.setAttribute("recoord", (char *)&*redata.begin(), nx::Attribute23::FLOAT);
+		decoder.setPositions((float *)&*recoords.begin());
+		//decoder.setAttribute("recoord", (char *)&*redata.begin(), nx::Attribute23::FLOAT);
 //		decoder.setData(0, &data, (char *)&*redata.begin());
 //		decoder.setNormals((float *)&*renorms.begin());
 //		decoder.setColors((uchar *)&*recolors.begin());

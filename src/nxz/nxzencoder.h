@@ -35,42 +35,39 @@ namespace nx {
 
 class NxzEncoder {
 public:
-	uint32_t flags; //keeps track of what is inside
+	//uint32_t flags; //keeps track of what is inside
 	uint32_t nvert, nface;
 
-	Attribute<Point3i> coord;
+/*	Attribute<Point3i> coord;
 	Attribute<Point2i> norm;
 	Attribute<unsigned char> color[4];
-	Attribute<Point2i> uv;
+	Attribute<Point2i> uv; */
 	std::map<std::string, Attribute23 *> data;
 
 	std::vector<uint32_t> index;
 	int index_size;
 	int header_size;
 
-	Normals normals_prediction;
+//	Normals normals_prediction;
 
 	Stream stream;
 
 	NxzEncoder(uint32_t _nvert, uint32_t _nface = 0, Stream::Entropy entropy = Stream::TUNSTALL);
 
-	void addCoords(float *buffer, float q = 0, Point3f o = Point3f(FLT_MAX));
-	void addCoords(float *buffer, uint32_t *index, float q = 0, Point3f o = Point3f(FLT_MAX));
-	void addCoords(float *buffer, uint16_t *index, float q = 0, Point3f o = Point3f(FLT_MAX));
-	void addCoords(int *buffer);
-	void addCoords(int *buffer, uint32_t *index);
-	void addCoords(int *buffer, uint16_t *index);
+	bool addPositions(Point3f *buffer, float q = 0.0f, Point3f o = Point3f(0.0f));
+	bool addPositions(Point3f *buffer, uint32_t *index, float q = 0.0f, Point3f o = Point3f(0.0f));
+	bool addPositions(Point3f *buffer, uint16_t *index, float q = 0.0f, Point3f o = Point3f(0.0f));
 
-	void addNormals(float *buffer, int bits, Normals no = ESTIMATED);
-	void addNormals(int16_t *buffer, int bits, Normals no = ESTIMATED);
+	bool addNormals(Point3f *buffer, int bits, NormalAttr::Prediction no = NormalAttr::ESTIMATED);
+	bool addNormals(Point3s *buffer, int bits, NormalAttr::Prediction no = NormalAttr::ESTIMATED);
 
-	void addColors(unsigned char *buffer, int lumabits = 6, int chromabits = 6, int alphabits = 5);
+	bool addColors(unsigned char *buffer, int lumabits = 6, int chromabits = 6, int alphabits = 5);
 
-	void addUV(float *buffer, float q = 0);
+	bool addUV(float *buffer, float q = 0);
 
-	bool addAttribute(const char *name, char *buffer, float q, Attribute23::Format format, int components, uint32_t strategy) {
+	bool addAttribute(const char *name, char *buffer, Attribute23::Format format, int components, float q, uint32_t strategy) {
 		if(data.count(name)) return false;
-		Attribute23 *attr = new GenericAttr<int>(components);
+		GenericAttr<int> *attr = new GenericAttr<int>(components);
 
 		attr->q = q;
 		attr->strategy = strategy;
@@ -79,7 +76,7 @@ public:
 		data[name] = attr;
 		return true;
 	}
-
+	//whatever is inside is your job to fill attr variables.
 	bool addAttribute(const char *name, char *buffer, Attribute23 *attr) {
 		if(data.count(name)) return true;
 		attr->quantize(nvert, buffer);
@@ -100,27 +97,27 @@ private:
 	std::vector<int> encoded;    //encoded vertex number
 	std::vector<Quad> prediction;
 
-	void setCoordBits();
-	void setDataBits();
+//	void setCoordBits();
+//	void setDataBits();
 
 	void encodePointCloud();
-	void encodeZPoints(std::vector<ZPoint> &zpoints);
+//	void encodeZPoints(std::vector<ZPoint> &zpoints);
 
 	void encodeMesh();
 	void encodeFaces(int start, int end, BitStream &bitstream);
 
-	void encodeCoords();
+/*	void encodeCoords();
 	void encodeNormals();
 	void encodeColors();
 	void encodeUvs();
-	void encodeDatas();
+	void encodeDatas(); */
 
-	void computeNormals(std::vector<Point2i> &estimated_normals);
+/*	void computeNormals(std::vector<Point2i> &estimated_normals);
 	void markBoundary();
 
 	void encodeDiff(std::vector<uchar> &diffs, BitStream &stream, int val);
 	void encodeDiff(std::vector<uchar> &diffs, BitStream &stream, const Point2i &val);
-	void encodeDiff(std::vector<uchar> &diffs, BitStream &stream, const Point3i &val);
+	void encodeDiff(std::vector<uchar> &diffs, BitStream &stream, const Point3i &val); */
 };
 
 } //namespace
