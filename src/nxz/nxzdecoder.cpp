@@ -43,21 +43,6 @@ NxzDecoder::NxzDecoder(int len, uchar *input):
 	stream.init(len, input);
 	stream.entropy = (Stream::Entropy)stream.read<uchar>();
 
-/*	coord.q = stream.read<float>();
-
-	if(flags & NORMAL) {
-		normals_prediction = (Normals)stream.read<uchar>();
-		norm.q = stream.read<float>();
-	}
-
-	if(flags & COLOR)
-		for(int k = 0; k < 4; k++)
-			color[k].q = stream.read<float>();
-
-	if(flags & UV)
-		uv.q = stream.read<float>();
-*/
-
 	int nattr = stream.read<int>();
 
 	for(int i = 0; i < nattr; i++) {
@@ -89,8 +74,8 @@ NxzDecoder::NxzDecoder(int len, uchar *input):
 }
 
 void NxzDecoder::decode() {
-	nface = stream.read<uint32_t>();
 	nvert = stream.read<uint32_t>();
+	nface = stream.read<uint32_t>();
 
 	if(nface > 0)
 		decodeMesh();
@@ -155,6 +140,19 @@ void NxzDecoder::decodeMesh() {
 	for(auto it: data)
 		it.second->deltaDecode(nvert, prediction);
 
+	std::vector<uint32_t> index(nface*3);
+	uint16_t *faces16 = ((uint16_t *)face.buffer);
+	uint32_t *faces32 = ((uint32_t *)face.buffer);
+	if(short_index)
+		for(uint32_t i = 0; i < nface*3; i++)
+			index[i] = faces16[i];
+	else
+		for(uint32_t i = 0; i < nface*3; i++)
+			index[i] = faces32[i];
+
+	for(auto it: data)
+		it.second->postDelta(nvert, data, index);
+
 	for(auto it: data)
 		it.second->dequantize(nvert);
 }
@@ -200,20 +198,19 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 			}
 
 			for(int k = 0; k < 3; k++) {
-				int v;
+				int v; //TODO just use last_index.
 				if(split & (1<<k))
 					v = bitstream.readUint(splitbits);
 				else {
+					assert(vertex_count < prediction.size());
 					prediction[vertex_count] = Face(last_index, last_index, last_index);
-					v = vertex_count++;
+					last_index = v = vertex_count++;
 				}
 				index[k] = v;
 				if(short_index)
 					faces16[start++] = v;
 				else
 					faces32[start++] = v;
-
-				last_index = v;
 			}
 			int current_edge = front.size();
 			faceorder.push_back(front.size());

@@ -113,6 +113,7 @@ bool NxzEncoder::addNormals(Point3f *buffer, int bits, NormalAttr::Prediction no
 
 	NormalAttr *normal = new NormalAttr(bits);
 	normal->format = Attribute23::FLOAT;
+	normal->prediction = no;
 	bool ok = addAttribute("normal", (char *)buffer, normal);
 	if(!ok) delete normal;
 	return ok;
@@ -203,18 +204,23 @@ void NxzEncoder::encodePointCloud() {
 
 	header_size = stream.elapsed();
 
+        stream.write<uint32_t>(nvert);
 	stream.write<uint32_t>(0); //nface
-	stream.write<uint32_t>(nvert);
+
 
 	prediction.resize(nvert);
 	prediction[0] = Quad(zpoints[0].pos, -1, -1, -1);
 	for(uint32_t i = 1; i < nvert; i++)
 		prediction[i] = Quad(zpoints[i].pos, zpoints[i-1].pos, zpoints[i-1].pos, zpoints[i-1].pos);
 
-	for(auto it: data) {
+	for(auto it: data)
 		it.second->deltaEncode(prediction);
+
+	for(auto it: data)
+		it.second->preDelta(nvert, data, index);
+
+	for(auto it: data)
 		it.second->encode(nvert, stream);
-	}
 }
 
 /*	Zpoint encoding gain 1 bit (because we know it's sorted, but it's 3/2 slower and limited to 22 bits precision.
@@ -260,7 +266,7 @@ void NxzEncoder::encodeMesh() {
 
 
 
-	BitStream bitstream;
+        BitStream bitstream(nvert/4);
 	prediction.resize(nvert);
 
 	start =  0;
@@ -433,6 +439,7 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 
 	int splitbits = ilog2(nvert) + 1;
 
+	int last_index = -1;
 	//	vector<int> test_faces;
 	int counting = 0;
 	while(totfaces > 0) {
@@ -447,14 +454,23 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 			//encode first face: 3 vertices indexes, and add edges
 			unsigned int current_edge = front.size();
 			McFace &face = faces[current];
-			//Point3i coord_estimated(0, 0, 0);
-			//Point2i uv_estimated(0, 0);
-			int last_index = current_vertex -1;
+
+			//int last_index = current_vertex -1; //ecccalla' la cazzata. mi servirebbe l'ultimo NON sorted.
 			int split = 0;
+
 			for(int k = 0; k < 3; k++) {
 				int vindex = face.f[k];
-				if(encoded[vindex] != -1)
+
+				if(encoded[vindex] != -1) {
 					split |= (1<<k);
+					bitstream.writeUint(encoded[vindex], splitbits);
+				} else {
+					//quad uises presorting indexing. (diff in attribute are sorted, values are not).
+					prediction[current_vertex] = Quad(vindex, last_index, last_index, last_index);
+					int enc = last_index < 0 ? -1 : encoded[last_index];
+					encoded[vindex] = current_vertex++;
+					last_index = vindex;
+				}
 			}
 
 			if(split) {
@@ -462,24 +478,13 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 				bitstream.writeUint(split, 3);
 			}
 
-			for(int k = 0; k < 3; k++) {
-				int vindex = face.f[k];
+			faceorder.push_back(front.size());
+			front.emplace_back(current, 0, current_edge + 2, current_edge + 1);
+			faceorder.push_back(front.size());
+			front.emplace_back(current, 1, current_edge + 0, current_edge + 2);
+			faceorder.push_back(front.size());
+			front.emplace_back(current, 2, current_edge + 1, current_edge + 0);
 
-				if(split & (1<<k))
-					bitstream.writeUint(encoded[vindex], splitbits);
-				else {
-					prediction[current_vertex] = Quad(vindex, last_index, last_index, last_index);
-					encoded[vindex] = current_vertex++;
-				}
-
-				last_index = vindex;
-				//coord_estimated = coord.values[vindex];
-				//if(flags & UV)
-				//	uv_estimated = uv.values[vindex];
-
-				faceorder.push_back(front.size());
-				front.emplace_back(current, k, current_edge + prev_(k), current_edge + next_(k));
-			}
 
 			counting++;
 			visited[current] = true;
@@ -571,6 +576,7 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 				int v2 = faces[e.face].f[e.side];
 				prediction[current_vertex] = Quad(opposite, v0, v1, v2);
 				encoded[opposite] = current_vertex++;
+				last_index = opposite;
 			}
 
 			previous_edge.next = first_edge;

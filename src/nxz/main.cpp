@@ -63,10 +63,9 @@ int main(int argc, char *argv[]) {
 //	encoder.addCoords((float *)&*coords.begin());
 
 	nx::NxzEncoder encoder(nvert, nface, nx::Stream::TUNSTALL);
-	encoder.addPositions((nx::Point3f *)&*coords.begin(), &*index.begin(), 0.0632463f);
-
-//	encoder.addNormals((float *)&*normals.begin(), 10, nx::DIFF);
-//	encoder.addColors((unsigned char *)&*colors.begin());
+	encoder.addPositions((nx::Point3f *)&*coords.begin(), &*index.begin());
+	encoder.addNormals((nx::Point3f *)&*normals.begin(), 10, nx::NormalAttr::DIFF);
+	encoder.addColors((unsigned char *)&*colors.begin());
 	encoder.encode();
 
 	nvert = encoder.nvert;
@@ -112,17 +111,14 @@ int main(int argc, char *argv[]) {
 		nx::NxzDecoder decoder(encoder.stream.size(), encoder.stream.data());
 		decoder.setPositions((float *)&*recoords.begin());
 //		decoder.setData(0, &data, (char *)&*redata.begin());
-//		decoder.setNormals((float *)&*renorms.begin());
-//		decoder.setColors((uchar *)&*recolors.begin());
+		if(decoder.data.count("normal"))
+			decoder.setNormals((float *)&*renorms.begin());
+		if(decoder.data.count("color"))
+			decoder.setColors((uchar *)&*recolors.begin());
+
 		decoder.setIndex(&*reindex.begin());
 		decoder.decode();
 	}
-
-	/*
-	for(uint32_t i = 0; i < recoords.size(); i++) {
-		if(recoords[i] != redata[i] && i < 10)
-			cout << "Different: " << recoords[i][0] << " " << redata[i][0] << endl;
-	} */
 
 	int delta = time.elapsed();
 	if(nface) {

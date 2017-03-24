@@ -56,7 +56,7 @@ public:
 	bool setPositions(float *buffer) { return setAttribute("position", (char *)buffer, Attribute23::FLOAT); }
 	bool setNormals(float *buffer)   { return setAttribute("normal", (char *)buffer, Attribute23::FLOAT); }
 	bool setNormals(int16_t *buffer) { return setAttribute("normal", (char *)buffer, Attribute23::INT16); }
-	bool setColors(uchar *buffer)    { return setAttribute("color", (char *)buffer, Attribute23::INT8); }
+	bool setColors(uchar *buffer)    { return setAttribute("color", (char *)buffer, Attribute23::UINT8); }
 	bool setUvs(float *buffer)       { return setAttribute("uv", (char *)buffer, Attribute23::FLOAT); }
 
 	bool setAttribute(const char *name, char *buffer, Attribute23::Format format) {

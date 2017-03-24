@@ -234,7 +234,7 @@ public:
 				int middle = 1<<(diff-1);
 				if(val < middle)
 					val = -val -middle;
-				values[i] = val;
+				values[i*N + c] = val;
 			}
 		}
 		return logs.size();
@@ -286,8 +286,8 @@ public:
 				//uint64_t &mask = bmask[diff]; //using table is 4% faster
 				const uint64_t mask = (1<<diff)-1;
 				uint64_t bits = bitstream.readUint(N*diff);
-				for(uint32_t i = N-1; i > 0; i--) {
-					p[i] = (bits & mask) - max;
+				for(uint32_t c = N-1; c > 0; c--) {
+					p[c] = (bits & mask) - max;
 					bits >>= diff;
 				}
 				p[0] = bits - max;

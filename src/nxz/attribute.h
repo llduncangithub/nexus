@@ -1,6 +1,7 @@
 #ifndef NX_ATTRIBUTE_H
 #define NX_ATTRIBUTE_H
 
+#include <map>
 #include "nxz.h"
 #include "cstream.h"
 

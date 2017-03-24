@@ -18,7 +18,9 @@ SOURCES += main.cpp \
     bitstream.cpp \
     ../../../vcglib/wrap/ply/plylib.cpp \
     cstream.cpp \
-    nxz.cpp
+    nxz.cpp \
+    color_attribute.cpp \
+    normal_attribute.cpp
 HEADERS += \
     nxzdecoder.h \
     nxzencoder.h \
