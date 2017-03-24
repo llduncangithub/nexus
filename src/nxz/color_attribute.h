@@ -55,6 +55,8 @@ public:
 		}
 	}
 
+	//TODO encode might need char conversion!
+
 	virtual void dequantize(uint32_t nvert) {
 		switch(format) {
 		case INT8:

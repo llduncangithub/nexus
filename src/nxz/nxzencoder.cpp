@@ -48,37 +48,6 @@ NxzEncoder::NxzEncoder(uint32_t _nvert, uint32_t _nface, Stream::Entropy entropy
 /* TODO: euristic for point clouds should be: about 1/10 of nearest neighbor.
   for now just use volume and number of points
   could also quantize to find a side where the points halve and use 1/10 */
-/*
-void NxzEncoder::addCoords(float *buffer, float q, Point3f o) {
-	flags |= COORD;
-	Point3f *coords = (Point3f *)buffer;
-
-	if(q == 0) {
-		Point3f max(-FLT_MAX), min(FLT_MAX);
-		for(uint32_t i = 0; i < nvert; i++) {
-			min.setMin(coords[i]);
-			max.setMax(coords[i]);
-		}
-		max -= min;
-		q = 0.01*pow(max[0]*max[1]*max[2], 2.0/3.0)/nvert;
-		if(o == Point3f(FLT_MAX))
-			o = min;
-	}
-	if(o == Point3f(FLT_MAX)) {
-		for(uint32_t i = 0; i < nvert; i++)
-			o.setMin(coords[i]);
-	}
-
-	coord.q = q;
-
-	for(uint32_t i = 0; i < nvert; i++) {
-		Point3i &q = coord.values[i];
-		Point3f &p = coords[i];
-		for(int k = 0; k < 3; k++)
-			q[k] = floor(p[k]/coord.q);
-	}
-	setCoordBits();
-} */
 
 bool NxzEncoder::addPositions(Point3f *buffer, float q, Point3f o) {
 	std::vector<Point3f> coords(nvert);
@@ -121,7 +90,7 @@ bool NxzEncoder::addPositions(Point3f *buffer, uint16_t *_index, float q, Point3
 	return addPositions(buffer, &*tmp.begin(), q, o);
 }
 
-/*void NxzEncoder::setCoordBits() {
+/*
 	//TODOThis should be stored somewhere for testing purpouses.
 	if(1) {
 		Point3i cmin(2147483647);
@@ -140,9 +109,6 @@ bool NxzEncoder::addPositions(Point3f *buffer, uint16_t *_index, float q, Point3
 	}
 } */
 
-
-/* NORMALS */
-
 bool NxzEncoder::addNormals(Point3f *buffer, int bits, NormalAttr::Prediction no) {
 
 	NormalAttr *normal = new NormalAttr(bits);
@@ -150,19 +116,6 @@ bool NxzEncoder::addNormals(Point3f *buffer, int bits, NormalAttr::Prediction no
 	bool ok = addAttribute("normal", (char *)buffer, normal);
 	if(!ok) delete normal;
 	return ok;
-
-/*	normals_prediction = no;
-	flags |= NORMAL;
-	norm.values.resize(nvert);
-	norm.diffs.resize(nvert);
-	norm.q = pow(2, bits-1);
-
-	Point3f *normals = (Point3f *)buffer;
-	for(uint32_t i = 0; i < nvert; i++) {
-		Point2i dt = norm.values[i] = Normal::encode(normals[i], (int)norm.q);
-		assert(abs(dt[0]) < (1<<25));
-		assert(abs(dt[1]) < (1<<25));
-	} */
 }
 
 bool NxzEncoder::addNormals(Point3s *buffer, int bits, NormalAttr::Prediction no) {
@@ -174,8 +127,6 @@ bool NxzEncoder::addNormals(Point3s *buffer, int bits, NormalAttr::Prediction no
 	return addNormals(&*tmp.begin(), bits, no);
 }
 
-/* COLORS */
-
 bool NxzEncoder::addColors(unsigned char *buffer, int lumabits, int chromabits, int alphabits) {
 	ColorAttr *color = new ColorAttr();
 	color->setQ(lumabits, chromabits, alphabits);
@@ -183,26 +134,6 @@ bool NxzEncoder::addColors(unsigned char *buffer, int lumabits, int chromabits, 
 	bool ok = addAttribute("color", (char *)buffer, color);
 	if(!ok) delete color;
 	return ok;
-/*	flags |= COLOR;
-	int q[4];
-	q[0] = color[0].q = 1<<(8 - lumabits);
-	q[1] = q[2] = color[1].q = color[2].q = 1<<(8 - chromabits);
-	q[3] = color[3].q = 1<<(8-alphabits);
-	for(int k = 0; k < 4; k++) {
-		color[k].values.resize(nvert);
-		color[k].diffs.resize(nvert);
-	}
-
-	Color4b *colors = (Color4b *)buffer;
-	for(uint32_t i = 0; i < nvert; i++) {
-		Color4b c = colors[i];
-		Color4b y;
-		for(int k = 0; k < 4; k++)
-			y[k] = c[k]/q[k];
-		y = y.toYCC();
-		for(int k = 0; k < 4; k++)
-			color[k].values[i] = y[k];
-	}*/
 }
 
 bool NxzEncoder::addUV(float *buffer, float q) {
@@ -212,59 +143,7 @@ bool NxzEncoder::addUV(float *buffer, float q) {
 	bool ok = addAttribute("uv", (char *)buffer, uv);
 	if(!ok) delete uv;
 	return ok;
-
-/*	flags |= UV;
-	if(q == 0) q = pow(2, -12);
-	uv.q = q;
-	uv.values.resize(nvert);
-	uv.diffs.resize(nvert);
-	Point2f *uvs = (Point2f *)buffer;
-	for(uint32_t i = 0; i < nvert; i++) {
-		uv.values[i][0] = (int)round(uvs[i][0]/uv.q);
-		uv.values[i][1] = (int)round(uvs[i][1]/uv.q);
-	}
-
-	if(1) {
-		Point2i cmin( 2147483647);
-		Point2i cmax(-2147483647);
-		for(auto &q: uv.values) {
-			cmax.setMax(q);
-			cmin.setMin(q);
-		}
-		cmax -= cmin;
-		int bits = 1 + std::max(ilog2(cmax[0]), ilog2(cmax[1]));
-		cout << "Texture cooridnates quantization in " << bits << " bits\n";
-	} */
 }
-/*
-void NxzEncoder::addData(Attribute23 *attr, char *buffer, float q) {
-	flags |= DATA*(1<<data.size());
-	attr->q = q;
-	attr->quantize(nvert, buffer);
-	data.push_back(attr);
-
-//	setDataBits();
-}*/
-/*
-void NxzEncoder::addData(int *buffer) {
-	flags |= DATA*(1<<data.size());
-	Data<int, int> *attr = new Data<int, int>(1.0f);
-	attr->quantize(nvert, (char *)buffer);
-	data.push_back(attr);
-} */
-
-//void NxzEncoder::setDataBits() {
-/*	auto &d = data.back();
-	int cmin =  2147483647;
-	int cmax = -2147483647;
-
-	for(auto &q: d.values) {
-		if(q < cmin) cmin = q;
-		if(q > cmax) cmax = q;
-	}
-	cmax -= cmin;
-	cout << "Data quantized in: " << 1 + ilog2(cmax) << " bits." << endl; */
-//}
 
 void NxzEncoder::encode() {
 	stream.reserve(nvert);
@@ -275,7 +154,8 @@ void NxzEncoder::encode() {
 	stream.write<int>(data.size());
 	for(auto it: data) {
 		stream.writeString(it.first.c_str());                //name
-		stream.write<uchar>(it.second->q);
+		stream.write<float>(it.second->q);
+		stream.write<uchar>(it.second->N);
 		stream.write<uchar>(it.second->strategy);
 	}
 
@@ -331,51 +211,11 @@ void NxzEncoder::encodePointCloud() {
 	for(uint32_t i = 1; i < nvert; i++)
 		prediction[i] = Quad(zpoints[i].pos, zpoints[i-1].pos, zpoints[i-1].pos, zpoints[i-1].pos);
 
-/*
-	encodeZPoints(zpoints);
-
-	//reorder attributes, compute differences end encode
-	if(flags & NORMAL) {
-		norm.diffs[0] = norm.values[zpoints[0].pos];
-		for(uint32_t i = 1; i < nvert; i++)
-			norm.diffs[i] = norm.values[zpoints[i].pos] - norm.values[zpoints[i-1].pos];
-
-		encodeNormals();
-	}
-
-	if(flags & COLOR) {
-		for(int k = 0; k < 4; k++) {
-			color[k].diffs[0] = color[k].values[zpoints[0].pos];
-			for(uint32_t i = 1; i < nvert; i++)
-				color[k].diffs[i] = color[k].values[zpoints[i].pos] - color[k].values[zpoints[i-1].pos];
-		}
-		encodeColors();
-	}
-
-	if(flags & UV) {
-		uv.diffs[0] = uv.values[zpoints[0].pos];
-		for(uint32_t i = 1; i < nvert; i++)
-			uv.diffs[i] = uv.values[zpoints[i].pos] - uv.values[zpoints[i-1].pos];
-		encodeUvs();
-	}*/
-
 	for(auto it: data) {
 		it.second->deltaEncode(prediction);
 		it.second->encode(nvert, stream);
 	}
 }
-
-/*void NxzEncoder::encodeZPoints(std::vector<ZPoint> &zpoints) {
-	vector<uchar> diffs;
-	BitStream bitstream(nvert/2);
-
-	coord.diffs.resize(nvert);
-	coord.diffs[0] = coord.values[zpoints[0].pos];
-	for(uint32_t i = 1; i < nvert; i++)
-		coord.diffs[i] = coord.values[zpoints[i].pos] - coord.values[zpoints[i-1].pos];
-
-	for(Point3i &d: coord.diffs)
-		encodeDiff(diffs, bitstream, d);
 
 /*	Zpoint encoding gain 1 bit (because we know it's sorted, but it's 3/2 slower and limited to 22 bits precision.
  *
@@ -388,88 +228,6 @@ void NxzEncoder::encodePointCloud() {
 		//we can get away with d diff bits (should be d+1) because the first bit will always be 1 (sorted q> p)
 		bitstream.write(q.bits, d); //rmember to add a 1, since
 	} */
-
-/*	stream.compress(diffs.size(), &*diffs.begin());
-	stream.write(bitstream);
-	coord.size = stream.elapsed();
-} */
-/*
-void NxzEncoder::encodeCoords() {
-	//TODO: diffs + bitstream is an logentropy compressor make it a class.
-	vector<uchar> diffs;
-	BitStream bitstream(nvert/2);
-
-	for(Point3i &d: coord.diffs)
-		encodeDiff(diffs, bitstream, d);
-
-	stream.compress(diffs.size(), &*diffs.begin());
-	stream.write(bitstream);
-	coord.size = stream.elapsed();
-}
-
-void NxzEncoder::encodeNormals() {
-	vector<uchar> diffs;
-	BitStream bitstream(nvert/64);
-
-	//TOO: VS using Point2i diff
-	for(uint32_t i = 0; i < nvert; i++)
-		if(normals_prediction != BORDER || boundary[i])
-			encodeDiff(diffs, bitstream, norm.diffs[i]);
-
-	stream.compress(diffs.size(), &*diffs.begin());
-	stream.write(bitstream);
-
-	norm.size = stream.elapsed();
-}
-
-void NxzEncoder::encodeColors() {
-
-	//TODO: Slightly more efficient to use only one bitstream,
-
-	for(int k = 0; k < 4; k++) {
-		BitStream bitstream(nvert/2);
-		vector<uchar> diffs;
-
-		//use complement to 255 (hence char conversion)
-
-		for(uchar &c: color[k].diffs)
-			encodeDiff(diffs, bitstream, (char)c);
-
-		stream.compress(diffs.size(), &*diffs.begin());
-		stream.write(bitstream);
-		color[k].size = stream.elapsed();
-	}
-}
-
-
-void NxzEncoder::encodeUvs() {
-	vector<uchar> diffs;
-	BitStream bitstream(nvert/2);
-
-	for(Point2i &u: uv.diffs)
-		encodeDiff(diffs, bitstream, u);
-
-	stream.compress(diffs.size(), &*diffs.begin());
-	stream.write(bitstream);
-	uv.size = stream.elapsed();
-}
-*/
-
-//void NxzEncoder::encodeDatas() {
-/*	for(auto &da: data) {
-		BitStream bitstream(nvert/2);
-		vector<uchar> diffs;
-
-		for(int &v: da.diffs)
-			encodeDiff(diffs, bitstream, v);
-
-		stream.compress(diffs.size(), &*diffs.begin());
-		stream.write(bitstream);
-		da.size += stream.elapsed();
-	} */
-//}
-
-
 
 //compact in place faces in data, update patches information, compute topology and encode each patch.
 void NxzEncoder::encodeMesh() {
@@ -525,6 +283,7 @@ void NxzEncoder::encodeMesh() {
 
 	stream.write<int>(nvert);
 	stream.write<int>(nface);
+
 	stream.write<int>(groups.size());
 	for(uint32_t &end: groups)
 		stream.write<int>(end);
@@ -532,140 +291,19 @@ void NxzEncoder::encodeMesh() {
 	header_size = stream.elapsed();
 
 
-/*	coord.diffs[0] = coord.values[prediction[0].t];
-	for(uint32_t i = 1; i < nvert; i++) {
-		Quad &q = prediction[i];
-		coord.diffs[i] = coord.values[q.t] - (coord.values[q.a] + coord.values[q.b] - coord.values[q.c]);
-	}
-
-	if((flags & NORMAL)) {
-
-
-		if((flags & NORMAL) && normals_prediction != DIFF) {
-			computeNormals(norm.diffs);
-			if(normals_prediction == BORDER)
-				markBoundary(); //mark boundary points on original vertices.
-			for(uint32_t i = 0; i < nvert; i++) {
-				norm.values[i] -= norm.diffs[i];
-
-				Point2i dt = norm.values[i];
-				assert(abs(dt[0]) < (1<<25));
-				assert(abs(dt[1]) < (1<<25));
-			}
-		}
-
-		norm.diffs[0] = norm.values[prediction[0].t];
-		for(uint32_t i = 1; i < nvert; i++) {
-			Quad &q = prediction[i];
-
-			Point2i &dt = norm.diffs[i];
-			dt = norm.values[q.t];
-
-			if(normals_prediction == DIFF) {
-				dt -= norm.values[q.a];
-				if(dt[0] < -norm.q)      dt[0] += 2*norm.q;
-				else if(dt[0] > +norm.q) dt[0] -= 2*norm.q;
-				if(dt[1] < -norm.q)      dt[1] += 2*norm.q;
-				else if(dt[1] > +norm.q) dt[1] -= 2*norm.q;
-			}
-		}
-	}
-
-	if(flags & COLOR) {
-		for(int k = 0; k < 4; k++)
-			color[k].diffs[0] = color[k].values[prediction[0].t];
-		for(uint32_t i = 1; i < nvert; i++) {
-			Quad &q = prediction[i];
-			for(int k = 0; k < 4; k++)
-				color[k].diffs[i] = color[k].values[q.t] - color[k].values[q.a];
-		}
-	}
-
-	if(flags & UV) {
-		uv.diffs[0] = uv.values[prediction[0].t];
-		for(uint32_t i = 1; i < nvert; i++) {
-			Quad &q = prediction[i];
-			uv.diffs[i] = uv.values[q.t] - (uv.values[q.a] + uv.values[q.b] - uv.values[q.c]);
-		}
-	} */
-
 	for(auto it: data)
 		it.second->deltaEncode(prediction);
-
-
-
 
 
 	stream.compress(clers.size(), &*clers.begin());
 	stream.write(bitstream);
 	index_size = stream.elapsed();
 
-/*(	encodeCoords();
-
-	if(flags & NORMAL)
-		encodeNormals();
-
-	if(flags & COLOR)
-		encodeColors();
-
-	if(flags & UV)
-		encodeUvs(); */
-
 	for(auto it: data)
 		it.second->encode(nvert, stream);
 
 }
 
-//How to determine if a vertex is a boundary without topology:
-//for each edge a vertex is in, add or subtract the id of the other vertex depending on order
-//for internal vertices sum is zero.
-//unless we have non manifold strange configurations zero wont happen.
-/*
-void NxzEncoder::markBoundary() {
-	boundary.resize(nvert, false);
-
-	vector<int> count(nvert, 0);
-	for(uint32_t i = 0; i < nface; i++) {
-		uint32_t *f = &index[i*3];
-		count[f[0]] += (int)f[1] - (int)f[2];
-		count[f[1]] += (int)f[2] - (int)f[0];
-		count[f[2]] += (int)f[0] - (int)f[1];
-	}
-	for(uint32_t i = 0; i < nvert; i++)
-		if(count[i] != 0)
-			boundary[i] = true;
-} */
-/*
-
-void NxzEncoder::computeNormals(vector<Point2i> &estimated) {
-	vector<Point3f> tmp(nvert, Point3f(0, 0, 0));
-	estimated.resize(nvert);
-	for(uint32_t i = 0; i < nface; i++) {
-		uint32_t *f = &index[i*3];
-		Point3i &p0 = coord.values[f[0]];
-		Point3i &p1 = coord.values[f[1]];
-		Point3i &p2 = coord.values[f[2]];
-		Point3i qn = (( p1 - p0) ^ (p2 - p0));
-		Point3f n(qn[0], qn[1], qn[2]);
-		tmp[f[0]] += n;
-		tmp[f[1]] += n;
-		tmp[f[2]] += n;
-	}
-	//normalize
-	for(uint32_t i = 0; i < nvert; i++) {
-		Point3f &n = tmp[i];
-		float len = n.norm();
-		if(len < 0.00001) {
-			estimated[i] = Point2i(0, 0);
-			continue;
-		}
-		n /= len;
-		estimated[i] = Normal::encode(n, norm.q);
-		assert(abs(estimated[i][0]) < (1<<25));
-		assert(abs(estimated[i][1]) < (1<<25));
-	}
-}
-*/
 class McFace {
 public:
 	uint32_t f[3];
@@ -949,92 +587,3 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 		totfaces--;
 	}
 }
-
-/*
- 0    -> 0 []
--1, 1 -> 1, [0,1]
--2, 2
--3, 3 -> 2 [0, 3]   (1<<2) max;
--4, 4
-..
--7, 7     3 [0,7] if(val>>1 < (1<<(diff-1)) val = -(1<<diff) + 1 + val;
-
-var middle = (1<<(diff-1));
-if(val < middle) val = -val -middle;
-
-//encode:
-0 - > 0
-			   000  001 010 011
--4   4         100  101 110 111
--7   7;        111
-
-if(d == 0) d = 0;
-if(d < 0) n = -d; else n = d;
-diff = ilog2(n)
-var middle = 1<<(diff-1);
-if(d < 0)
-	d = -middle - val;
-
-*/
-
-//val can be zero.
-/*
-void NxzEncoder::encodeDiff(vector<uchar> &diffs, BitStream &stream, int val) {
-	if(val == 0) {
-		diffs.push_back(0);
-		return;
-	}
-	int ret = ilog2(abs(val)) + 1;  //0 -> 0, [1,-1] -> 1 [-2,-3,2,3] -> 2
-	diffs.push_back(ret);
-	int middle = (1<<ret)>>1;
-	if(val < 0) val = -val -middle;
-	stream.writeUint(val, ret);
-}
-
-
-int needed(int a) {
-	if(a == 0) return 0;
-	if(a == -1) return 1;
-	if(a < 0) a = -a - 1;
-	int n = 2;
-	while(a >>= 1) n++;
-	return n;
-}
-
-//0 -> 0
-//1 -> [-1, 0]
-//2 -> [-2, -1, 0, 1]
-//3 -> [-4 -3 -2 0 1 2 3]
-
-
-void NxzEncoder::encodeDiff(vector<uchar> &diffs, BitStream &bitstream, const Point2i &val) {
-
-	assert(abs(val[0]) < (1<<25));
-	assert(abs(val[1]) < (1<<25));
-
-	int diff = std::max(needed(val[0]), needed(val[1]));
-	diffs.push_back(diff);
-	if(diff == 0) return;
-
-	int max = 1<<(diff-1);
-	bitstream.writeUint(val[0] + max, diff);
-	bitstream.writeUint(val[1] + max, diff);
-}
-
-void NxzEncoder::encodeDiff(vector<uchar> &diffs, BitStream &bitstream, const Point3i &val) {
-	assert(abs(val[0]) < (1<<25));
-	assert(abs(val[1]) < (1<<25));
-	assert(abs(val[2]) < (1<<25));
-
-	int diff = std::max(needed(val[0]), needed(val[1]));
-	diff = std::max(diff, needed(val[2]));
-	diffs.push_back(diff);
-	if(diff == 0) return;
-
-	int max = 1<<(diff-1);
-	bitstream.writeUint(val[0] + max, diff);
-	bitstream.writeUint(val[1] + max, diff);
-	bitstream.writeUint(val[2] + max, diff);
-}
-
-*/
