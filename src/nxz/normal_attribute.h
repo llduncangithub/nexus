@@ -25,7 +25,7 @@ public:
 	virtual void deltaEncode(std::vector<Quad> &context);
 	virtual void encode(uint32_t nvert, Stream &stream) {
 		stream.write<uchar>(prediction);
-		GenericAttr<int>::encode(nvert, stream);
+		GenericAttr<int>::encode(diffs.size()/2, stream); //border encode only border diffs
 	}
 
 	virtual void decode(uint32_t nvert, Stream &stream);

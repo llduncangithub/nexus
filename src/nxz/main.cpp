@@ -64,7 +64,7 @@ int main(int argc, char *argv[]) {
 
 	nx::NxzEncoder encoder(nvert, nface, nx::Stream::TUNSTALL);
 	encoder.addPositions((nx::Point3f *)&*coords.begin(), &*index.begin());
-	encoder.addNormals((nx::Point3f *)&*normals.begin(), 10, nx::NormalAttr::DIFF);
+	encoder.addNormals((nx::Point3f *)&*normals.begin(), 10, nx::NormalAttr::ESTIMATED);
 	encoder.addColors((unsigned char *)&*colors.begin());
 	encoder.encode();
 

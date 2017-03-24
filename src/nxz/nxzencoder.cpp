@@ -214,10 +214,10 @@ void NxzEncoder::encodePointCloud() {
 		prediction[i] = Quad(zpoints[i].pos, zpoints[i-1].pos, zpoints[i-1].pos, zpoints[i-1].pos);
 
 	for(auto it: data)
-		it.second->deltaEncode(prediction);
+		it.second->preDelta(nvert, data, index);
 
 	for(auto it: data)
-		it.second->preDelta(nvert, data, index);
+		it.second->deltaEncode(prediction);
 
 	for(auto it: data)
 		it.second->encode(nvert, stream);
@@ -296,6 +296,8 @@ void NxzEncoder::encodeMesh() {
 
 	header_size = stream.elapsed();
 
+	for(auto it: data)
+		it.second->preDelta(nvert, data, index);
 
 	for(auto it: data)
 		it.second->deltaEncode(prediction);
