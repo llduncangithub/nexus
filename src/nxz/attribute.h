@@ -96,6 +96,7 @@ public:
 					diffs[i*N + c] = values[q.t*N + c] - values[q.a*N + c];
 			}
 		}
+		diffs.resize(context.size()*N); //unreferenced vertices
 	}
 
 	virtual void encode(uint32_t nvert, Stream &stream) {

@@ -64,7 +64,7 @@ int main(int argc, char *argv[]) {
 
 	nx::NxzEncoder encoder(nvert, nface, nx::Stream::TUNSTALL);
 	encoder.addPositions((nx::Point3f *)&*coords.begin(), &*index.begin());
-	encoder.addNormals((nx::Point3f *)&*normals.begin(), 10, nx::NormalAttr::ESTIMATED);
+	encoder.addNormals((nx::Point3f *)&*normals.begin(), 10, nx::NormalAttr::DIFF);
 	encoder.addColors((unsigned char *)&*colors.begin());
 	encoder.encode();
 
@@ -106,7 +106,7 @@ int main(int argc, char *argv[]) {
 	QTime time;
 	time.start();
 
-	int iter = 1;
+	int iter = 100;
 	for(int i = 0; i < iter; i++) {
 		nx::NxzDecoder decoder(encoder.stream.size(), encoder.stream.data());
 		decoder.setPositions((float *)&*recoords.begin());

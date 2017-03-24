@@ -266,7 +266,7 @@ void NxzEncoder::encodeMesh() {
 
 
 
-        BitStream bitstream(nvert/4);
+	BitStream bitstream(nvert/4);
 	prediction.resize(nvert);
 
 	start =  0;
@@ -279,13 +279,14 @@ void NxzEncoder::encodeMesh() {
 	for(uint32_t i = 0; i < nvert; i++) {
 		if(encoded[i] != -1)
 			continue;
-		int last = current_vertex-1;
+		int last = cur`rent_vertex-1;
 		prediction.emplace_back(Quad(i, last, last, last));
 		current_vertex++;
 	}
 #endif
 	cout << "Unreference vertices: " << nvert - current_vertex << " remaining: " << current_vertex << endl;
 	nvert = current_vertex;
+	prediction.resize(nvert);
 
 	stream.write<int>(nvert);
 	stream.write<int>(nface);

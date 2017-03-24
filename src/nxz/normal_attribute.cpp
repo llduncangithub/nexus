@@ -80,6 +80,8 @@ void NormalAttr::deltaEncode(std::vector<Quad> &context) {
 				else if(d > q) d -= 2*q;
 			}
 		}
+		diffs.resize(context.size()*N); //unreferenced vertices
+
 	} else  {//just reorder diffs, for border story only boundary diffs
 		uint32_t count = 1;
 
@@ -91,7 +93,7 @@ void NormalAttr::deltaEncode(std::vector<Quad> &context) {
 				count++;
 			}
 		}
-		diffs.resize(count);
+		diffs.resize(count*N); //unreferenced vertices and borders
 	}
 }
 
@@ -212,7 +214,8 @@ void NormalAttr::estimateNormals(uint32_t nvert, Point3i *coords, std::vector<ui
 	for(uint32_t i = 0; i < nvert; i++) {
 		Point3f &n = estimated[i];
 		float len = n.norm();
-		if(len < 0.00001) {
+		if(len < 0.00001f) {
+			n = Point3f(0.0f, 0.0f, 1.0f);
 			continue;
 		}
 		n /= len;
