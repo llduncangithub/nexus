@@ -58,12 +58,14 @@ int main(int argc, char *argv[]) {
 	uint32_t nvert = mesh.vert.size();
 	uint32_t nface = mesh.face.size();
 
+	//TODO checks for: strategy cannot be parallel in point clouds (ALL attributes)
+	//                 normals strategy must be DIFF
 
-//	nx::NxzEncoder encoder(nvert, 0, nx::Stream::TUNSTALL);
-//	encoder.addCoords((float *)&*coords.begin());
+	nx::NxzEncoder encoder(nvert, 0, nx::Stream::TUNSTALL);
+	encoder.addPositions((nx::Point3f *)&*coords.begin());
 
-	nx::NxzEncoder encoder(nvert, nface, nx::Stream::TUNSTALL);
-	encoder.addPositions((nx::Point3f *)&*coords.begin(), &*index.begin());
+//	nx::NxzEncoder encoder(nvert, nface, nx::Stream::TUNSTALL);
+//	encoder.addPositions((nx::Point3f *)&*coords.begin(), &*index.begin());
 	encoder.addNormals((nx::Point3f *)&*normals.begin(), 10, nx::NormalAttr::DIFF);
 	encoder.addColors((unsigned char *)&*colors.begin());
 	encoder.encode();
@@ -116,7 +118,7 @@ int main(int argc, char *argv[]) {
 		if(decoder.data.count("color"))
 			decoder.setColors((uchar *)&*recolors.begin());
 
-		decoder.setIndex(&*reindex.begin());
+		//decoder.setIndex(&*reindex.begin());
 		decoder.decode();
 	}
 

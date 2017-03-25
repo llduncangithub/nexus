@@ -63,8 +63,11 @@ bool NxzEncoder::addPositions(Point3f *buffer, float q, Point3f o) {
 		max -= min;
 		q = 0.02*pow(max[0]*max[1]*max[2], 2.0/3.0)/nvert;
 	}
+	uint32_t strategy = Attribute23::CORRELATED;
+	if(nface > 0)
+		strategy |= Attribute23::PARALLEL;
 
-	return addAttribute("position", (char *)buffer, Attribute23::FLOAT, 3, q, Attribute23::CORRELATED | Attribute23::PARALLEL);
+	return addAttribute("position", (char *)buffer, Attribute23::FLOAT, 3, q, strategy );
 }
 
 
@@ -478,14 +481,12 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 				if(enc != -1) {
 					bitstream.writeUint(enc, splitbits);
 				} else {
-					//quad uises presorting indexing. (diff in attribute are sorted, values are not).
+					//quad uses presorting indexing. (diff in attribute are sorted, values are not).
 					prediction[current_vertex] = Quad(vindex, last_index, last_index, last_index);
 					enc = current_vertex++;
 					last_index = vindex;
 				}
 			}
-
-
 
 			faceorder.push_back(front.size());
 			front.emplace_back(current, 0, current_edge + 2, current_edge + 1);

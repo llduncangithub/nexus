@@ -122,8 +122,12 @@ void NormalAttr::deltaDecode(uint32_t nvert, std::vector<Face> &context) {
 
 		}
 	} else { //point clouds assuming values are already sorted by proximity.
-		for(uint32_t i = 2; i < nvert; i += 2)
-			diffs[i] += diffs[i-1];
+		for(uint32_t i = 2; i < nvert*2; i++) {
+			int &d = diffs[i];
+			d += diffs[i-2];
+			if(d < -q)     d += 2*q;
+			else if(d > q) d -= 2*q;
+		}
 	}
 }
 

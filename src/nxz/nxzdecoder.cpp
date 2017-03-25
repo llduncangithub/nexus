@@ -84,14 +84,18 @@ void NxzDecoder::decode() {
 }
 
 void NxzDecoder::decodePointCloud() {
-	nvert = stream.read<int>();
 
 	std::vector<nx::Face> dummy;
-	for(auto it: data) {
+
+	for(auto it: data)
 		it.second->decode(nvert, stream);
+	for(auto it: data)
 		it.second->deltaDecode(nvert, dummy);
+/*	for(auto it: data)
+		it.second->postDelta(nvert, dummy); */
+	for(auto it: data)
 		it.second->dequantize(nvert);
-	}
+
 }
 /*
 	Zpoint encoding gain 1 bit (because we know it's sorted: diffs are positive!, but it's 3/2 slower and limited to 22 bits precision.
