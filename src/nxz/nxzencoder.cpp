@@ -460,26 +460,32 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 
 			//int last_index = current_vertex -1; //ecccalla' la cazzata. mi servirebbe l'ultimo NON sorted.
 			int split = 0;
-
 			for(int k = 0; k < 3; k++) {
 				int vindex = face.f[k];
-
-				if(encoded[vindex] != -1) {
-					split |= (1<<k);
-					bitstream.writeUint(encoded[vindex], splitbits);
-				} else {
-					//quad uises presorting indexing. (diff in attribute are sorted, values are not).
-					prediction[current_vertex] = Quad(vindex, last_index, last_index, last_index);
-					int enc = last_index < 0 ? -1 : encoded[last_index];
-					encoded[vindex] = current_vertex++;
-					last_index = vindex;
-				}
+				if(encoded[vindex] != -1)
+					split |= 1<<k;
 			}
 
 			if(split) {
 				clers.push_back(SPLIT);
 				bitstream.writeUint(split, 3);
 			}
+
+			for(int k = 0; k < 3; k++) {
+				uint32_t vindex = face.f[k];
+				int &enc = encoded[vindex];
+
+				if(enc != -1) {
+					bitstream.writeUint(enc, splitbits);
+				} else {
+					//quad uises presorting indexing. (diff in attribute are sorted, values are not).
+					prediction[current_vertex] = Quad(vindex, last_index, last_index, last_index);
+					enc = current_vertex++;
+					last_index = vindex;
+				}
+			}
+
+
 
 			faceorder.push_back(front.size());
 			front.emplace_back(current, 0, current_edge + 2, current_edge + 1);
