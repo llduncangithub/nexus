@@ -49,10 +49,11 @@ NxzEncoder::NxzEncoder(uint32_t _nvert, uint32_t _nface, Stream::Entropy entropy
   for now just use volume and number of points
   could also quantize to find a side where the points halve and use 1/10 */
 
-bool NxzEncoder::addPositions(Point3f *buffer, float q, Point3f o) {
+bool NxzEncoder::addPositions(float *buffer, float q, Point3f o) {
 	std::vector<Point3f> coords(nvert);
+	Point3f *input = (Point3f *)buffer;
 	for(uint32_t i = 0; i < nvert; i++)
-		coords[i] = buffer[i] - o;
+		coords[i] = input[i] - o;
 
 	if(q == 0) { //assume point cloud and estimate quantization
 		Point3f max(-FLT_MAX), min(FLT_MAX);
@@ -72,7 +73,7 @@ bool NxzEncoder::addPositions(Point3f *buffer, float q, Point3f o) {
 
 
 /* if not q specified use 1/10th of average leght of edge  */
-bool NxzEncoder::addPositions(Point3f *buffer, uint32_t *_index, float q, Point3f o) {
+bool NxzEncoder::addPositions(float *buffer, uint32_t *_index, float q, Point3f o) {
 	index.resize(nface*3);
 	memcpy(&*index.begin(), _index,  nface*12);
 
@@ -86,7 +87,7 @@ bool NxzEncoder::addPositions(Point3f *buffer, uint32_t *_index, float q, Point3
 	return addPositions(buffer, q, o);
 }
 
-bool NxzEncoder::addPositions(Point3f *buffer, uint16_t *_index, float q, Point3f o) {
+bool NxzEncoder::addPositions(float *buffer, uint16_t *_index, float q, Point3f o) {
 	vector<uint32_t> tmp(nface*3);
 	for(uint32_t i = 0; i < nvert*3; i++)
 		tmp[i] = _index[i];
@@ -112,7 +113,7 @@ bool NxzEncoder::addPositions(Point3f *buffer, uint16_t *_index, float q, Point3
 	}
 } */
 
-bool NxzEncoder::addNormals(Point3f *buffer, int bits, NormalAttr::Prediction no) {
+bool NxzEncoder::addNormals(float *buffer, int bits, NormalAttr::Prediction no) {
 
 	NormalAttr *normal = new NormalAttr(bits);
 	normal->format = Attribute23::FLOAT;
@@ -122,13 +123,13 @@ bool NxzEncoder::addNormals(Point3f *buffer, int bits, NormalAttr::Prediction no
 	return ok;
 }
 
-bool NxzEncoder::addNormals(Point3s *buffer, int bits, NormalAttr::Prediction no) {
+bool NxzEncoder::addNormals(int16_t *buffer, int bits, NormalAttr::Prediction no) {
 	assert(bits <= 16);
 	vector<Point3f> tmp(nvert*3);
 	for(uint32_t i = 0; i < nvert; i++)
 		for(int k = 0; k < 3; k++)
-			tmp[i][k] = buffer[i][k]/32767.0f;
-	return addNormals(&*tmp.begin(), bits, no);
+			tmp[i][k] = buffer[i*3 + k]/32767.0f;
+	return addNormals((float *)&*tmp.begin(), bits, no);
 }
 
 bool NxzEncoder::addColors(unsigned char *buffer, int lumabits, int chromabits, int alphabits) {
@@ -416,6 +417,7 @@ static int next_(int t) {
 	if(t == 3) t = 0;
 	return t;
 }
+
 static int prev_(int t) {
 	t--;
 	if(t == -1) t = 2;

@@ -36,18 +36,10 @@ namespace nx {
 class NxzDecoder {
 public:
 	uint32_t nvert, nface;
-//	uint32_t flags;
-
-/*	Attribute<Point3i> coord;
-	Attribute<Point3i> norm;
-	Attribute<int> color[4];
-	Attribute<Point2i> uv; */
 
 	std::map<std::string, Attribute23 *> data;
-	Attribute<int> face; //turn this into a pointer: face32 and face16
+	Attribute<int> face; //turn this into a different class: with face32 and face16 pointers.
 
-//	Normals normals_prediction;
-	Stream stream;
 
 	NxzDecoder(int len, uchar *input);
 
@@ -59,25 +51,8 @@ public:
 	bool setColors(uchar *buffer)    { return setAttribute("color", (char *)buffer, Attribute23::UINT8); }
 	bool setUvs(float *buffer)       { return setAttribute("uv", (char *)buffer, Attribute23::FLOAT); }
 
-	bool setAttribute(const char *name, char *buffer, Attribute23::Format format) {
-		if(data.find(name) == data.end()) return false;
-		Attribute23 *attr = data[name];
-		attr->format = format;
-		attr->buffer = buffer;
-		return true;
-	}
-
-	bool setAttribute(const char *name, char *buffer, Attribute23 *attr) {
-		if(data.find(name) == data.end()) return false;
-		Attribute23 *found = data[name];
-		attr->q = found->q;
-		attr->strategy = found->strategy;
-		attr->N = found->N;
-		attr->buffer = buffer;
-		delete data[name];
-		data[name] = attr;
-		return true;
-	}
+	bool setAttribute(const char *name, char *buffer, Attribute23::Format format);
+	bool setAttribute(const char *name, char *buffer, Attribute23 *attr);
 
 	void setIndex(uint32_t *buffer) {face.buffer = buffer; }
 	void setIndex(int16_t *buffer) {
@@ -85,73 +60,24 @@ public:
 		short_index = true;
 	}
 
-/*	template <class T> void setAttribute(int n, T *buffer);
-	template <class T> void setAttribute(int n, Attribute *a, T *buffer); */
-
 	void decode();
 
 private:
+	Stream stream;
+
 	bool short_normals;
 	bool short_index;
-	//std::vector<bool> boundary;
+
 	std::vector<uint32_t> groups;
 	std::vector<uchar> clers;
-
 	std::vector<Face> prediction;
 
 	int vertex_count; //keep tracks of current decoding vertex
 
 	void decodePointCloud();
 	void decodeMesh();
-	void decodeZPoints();
-	void decodeCoords();
-	void decodeNormals();
-	void decodeColors();
-	void decodeUvs();
-	void decodeDatas();
-
-	void shuffle(); //shuffle vertices for point clouds
-
 	void decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitStream &bitstream);
-	//TODO these are in common with MeshCoder, we should make a NxzEncoder class and move the common parts
-	void estimateNormals(Point3f *normals3f);
-	void computeNormals(Point3f *normals, Point3f *estimated);
-	void computeNormals(Point3s *normals, Point3f *estimated);
-
-	template <class F> void markBoundary();
-
-
-	//we assume integer computations and float computations are equivalent for numbers < 1<<23 ? we shouldnt
-//	int decodeVertex(const Point3i &predicted, const Point2i &texpredicted, int last_index);
-	int decodeVertex(int v0, int v1, int v2);
-
-
-	int decodeDiff(uchar diff, BitStream &stream);
-	void decodeDiff(uchar diff, BitStream &stream, Point3i &p);
-	void decodeDiff(uchar diff, BitStream &stream, Point3s &p);
-	void decodeDiff(uchar diff, BitStream &stream, Point2i &p);
-	void decodeDiff(uchar diff, BitStream &stream, Point2s &p);
-
-	void dequantize();
 };
-
-/*
-template <class F> void NxzDecoder::markBoundary() {
-	boundary.resize(nvert, false);
-
-	std::vector<int> count(nvert, 0);
-	F *f = (F *)face.buffer;
-	for(uint32_t i = 0; i < nface; i++) {
-		count[f[0]] += (int)f[1] - (int)f[2];
-		count[f[1]] += (int)f[2] - (int)f[0];
-		count[f[2]] += (int)f[0] - (int)f[1];
-		f += 3;
-	}
-	for(uint32_t i = 0; i < nvert; i++)
-		if(count[i] != 0)
-			boundary[i] = true;
-}
-*/
 
 
 } //namespace

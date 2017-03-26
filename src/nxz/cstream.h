@@ -192,7 +192,7 @@ public:
 		BitStream bitstream(size);
 		//Storing bitstream before logs, allows in decompression to allocate only 1 logs array and reuse it.
 		std::vector<uchar> clogs[N];
-		for(uint32_t c = 0; c < N; c++) {
+		for(int c = 0; c < N; c++) {
 			auto &logs = clogs[c];
 			logs.resize(size);
 			for(uint32_t i = 0; i < size; i++) {
@@ -210,7 +210,7 @@ public:
 		}
 
 		write(bitstream);
-		for(uint32_t c = 0; c < N; c++)
+		for(int c = 0; c < N; c++)
 			compress(clogs[c].size(), &*clogs[c].begin());
 	}
 
@@ -220,7 +220,7 @@ public:
 
 		std::vector<uchar> logs;
 
-		for(uint32_t c = 0; c < N; c++) {
+		for(int c = 0; c < N; c++) {
 			decompress(logs);
 
 			for(uint32_t i = 0; i < logs.size(); i++) {
@@ -248,7 +248,7 @@ public:
 		for(uint32_t i = 0; i < size; i++) {
 			T *p = values + i*N;
 			int diff = needed(p[0]);
-			for(uint32_t c = 1; c < N; c++) {
+			for(int c = 1; c < N; c++) {
 				int d = needed(p[c]);
 				if(diff < d) diff = d;
 			}
@@ -256,7 +256,7 @@ public:
 			if(diff == 0) continue;
 
 			int max = 1<<(diff-1);
-			for(uint32_t c = 0; c < N; c++)
+			for(int c = 0; c < N; c++)
 				bitstream.writeUint(p[c] + max, diff);
 		}
 
@@ -275,7 +275,7 @@ public:
 			T *p = values + i*N;
 			uchar &diff = logs[i];
 			if(diff == 0) {
-				for(uint32_t c = 0; c < N; c++)
+				for(int c = 0; c < N; c++)
 					p[c] = 0;
 				continue;
 			}
@@ -292,7 +292,7 @@ public:
 				}
 				p[0] = bits - max;
 			} else {
-				for(uint32_t c = 0; c < N; c++)
+				for(int c = 0; c < N; c++)
 					p[c] = bitstream.readUint(diff) - max;
 			}
 		}

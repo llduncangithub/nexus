@@ -54,12 +54,12 @@ public:
 
 	NxzEncoder(uint32_t _nvert, uint32_t _nface = 0, Stream::Entropy entropy = Stream::TUNSTALL);
 
-	bool addPositions(Point3f *buffer, float q = 0.0f, Point3f o = Point3f(0.0f));
-	bool addPositions(Point3f *buffer, uint32_t *index, float q = 0.0f, Point3f o = Point3f(0.0f));
-	bool addPositions(Point3f *buffer, uint16_t *index, float q = 0.0f, Point3f o = Point3f(0.0f));
+	bool addPositions(float *buffer, float q = 0.0f, Point3f o = Point3f(0.0f));
+	bool addPositions(float *buffer, uint32_t *index, float q = 0.0f, Point3f o = Point3f(0.0f));
+	bool addPositions(float *buffer, uint16_t *index, float q = 0.0f, Point3f o = Point3f(0.0f));
 
-	bool addNormals(Point3f *buffer, int bits, NormalAttr::Prediction no = NormalAttr::ESTIMATED);
-	bool addNormals(Point3s *buffer, int bits, NormalAttr::Prediction no = NormalAttr::ESTIMATED);
+	bool addNormals(float *buffer, int bits, NormalAttr::Prediction no = NormalAttr::ESTIMATED);
+	bool addNormals(int16_t *buffer, int bits, NormalAttr::Prediction no = NormalAttr::ESTIMATED);
 
 	bool addColors(unsigned char *buffer, int lumabits = 6, int chromabits = 6, int alphabits = 5);
 

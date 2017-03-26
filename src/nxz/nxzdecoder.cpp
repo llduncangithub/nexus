@@ -66,12 +66,28 @@ NxzDecoder::NxzDecoder(int len, uchar *input):
 		attr->strategy = strategy;
 		data[name] = attr;
 	}
-
-
-
-//	data.resize(stream.read<int>(), nullptr);
-
 }
+
+bool NxzDecoder::setAttribute(const char *name, char *buffer, Attribute23::Format format) {
+	if(data.find(name) == data.end()) return false;
+	Attribute23 *attr = data[name];
+	attr->format = format;
+	attr->buffer = buffer;
+	return true;
+}
+
+bool NxzDecoder::setAttribute(const char *name, char *buffer, Attribute23 *attr) {
+	if(data.find(name) == data.end()) return false;
+	Attribute23 *found = data[name];
+	attr->q = found->q;
+	attr->strategy = found->strategy;
+	attr->N = found->N;
+	attr->buffer = buffer;
+	delete data[name];
+	data[name] = attr;
+	return true;
+}
+
 
 void NxzDecoder::decode() {
 	nvert = stream.read<uint32_t>();
@@ -144,6 +160,7 @@ void NxzDecoder::decodeMesh() {
 	for(auto it: data)
 		it.second->deltaDecode(nvert, prediction);
 
+	//TODO cleanup this mess.
 	std::vector<uint32_t> index(nface*3);
 	uint16_t *faces16 = ((uint16_t *)face.buffer);
 	uint32_t *faces32 = ((uint32_t *)face.buffer);
@@ -206,7 +223,7 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 				if(split & (1<<k))
 					v = bitstream.readUint(splitbits);
 				else {
-					assert(vertex_count < prediction.size());
+					assert(vertex_count < (int)prediction.size());
 					prediction[vertex_count] = Face(last_index, last_index, last_index);
 					last_index = v = vertex_count++;
 				}

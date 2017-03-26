@@ -23,7 +23,7 @@ public:
 	virtual void quantize(uint32_t nvert, char *buffer);
 	virtual void preDelta(uint32_t nvert, std::map<std::string, Attribute23 *> &attrs, std::vector<uint32_t> &index);
 	virtual void deltaEncode(std::vector<Quad> &context);
-	virtual void encode(uint32_t nvert, Stream &stream) {
+	virtual void encode(uint32_t /*nvert*/, Stream &stream) {
 		stream.write<uchar>(prediction);
 		GenericAttr<int>::encode(diffs.size()/2, stream); //border encode only border diffs
 	}

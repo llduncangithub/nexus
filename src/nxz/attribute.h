@@ -58,6 +58,7 @@ public:
 		values.resize(n);
 		diffs.resize(n);
 		int *vals = (int *)&*values.begin();
+		//TODO suppor other  formats
 		switch(format) {
 		case INT32:
 			for(uint32_t i = 0; i < n; i++)
@@ -79,6 +80,7 @@ public:
 			for(uint32_t i = 0; i < n; i++)
 				vals[i] = ((double *)buffer)[i]/q;
 			break;
+		default: throw "Unsupported format.";
 		}
 
 	}
