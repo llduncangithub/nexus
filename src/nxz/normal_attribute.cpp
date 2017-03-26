@@ -2,7 +2,49 @@
 
 using namespace nx;
 
+//Normal estimation
 
+template <class T> void markBoundary(uint32_t nvert, uint32_t nface, T *index, std::vector<bool> &boundary) {
+	boundary.clear();
+	boundary.resize(nvert, false);
+
+	vector<int> count(nvert, 0);
+	T *end = index + nface*3;
+	for(T *f = index; f < end; f += 3) {
+		count[f[0]] += (int)f[1] - (int)f[2];
+		count[f[1]] += (int)f[2] - (int)f[0];
+		count[f[2]] += (int)f[0] - (int)f[1];
+	}
+	for(uint32_t i = 0; i < nvert; i++)
+		if(count[i] != 0)
+			boundary[i] = true;
+}
+
+
+template <class T> void estimateNormals(uint32_t nvert, Point3i *coords, uint32_t nface, T *index, std::vector<Point3f> &estimated) {
+	estimated.clear();
+	estimated.resize(nvert, Point3f(0.0f, 0.0f, 0.0f));
+	T *end = index + nface*3;
+	for(T *f = index; f < end; f += 3) {
+		Point3i &p0 = coords[f[0]];
+		Point3i &p1 = coords[f[1]];
+		Point3i &p2 = coords[f[2]];
+		Point3i qn = (( p1 - p0) ^ (p2 - p0));
+		Point3f n(qn[0], qn[1], qn[2]);
+		estimated[f[0]] += n;
+		estimated[f[1]] += n;
+		estimated[f[2]] += n;
+	}
+	for(uint32_t i = 0; i < nvert; i++) {
+		Point3f &n = estimated[i];
+		float len = n.norm();
+		if(len < 0.00001f) {
+			n = Point3f(0.0f, 0.0f, 1.0f);
+			continue;
+		}
+		n /= len;
+	}
+}
 
 void NormalAttr::quantize(uint32_t nvert, char *buffer) {
 	uint32_t n = N*nvert;
@@ -39,7 +81,7 @@ void NormalAttr::quantize(uint32_t nvert, char *buffer) {
 }
 
 
-void NormalAttr::preDelta(uint32_t nvert, std::map<std::string, Attribute23 *> &attrs, std::vector<uint32_t> &index) {
+void NormalAttr::preDelta(uint32_t nvert,  uint32_t nface, std::map<std::string, Attribute23 *> &attrs, IndexAttr &index) {
 	if(prediction == DIFF)
 		return;
 
@@ -50,16 +92,17 @@ void NormalAttr::preDelta(uint32_t nvert, std::map<std::string, Attribute23 *> &
 	if(!coord)
 		throw "Position attr has been overloaded, Use DIFF normal strategy instead.";
 
+	uint32_t *start = &*index.faces.begin();
 	//estimate normals using vertices and faces existing.
 	std::vector<Point3f> estimated;
-	estimateNormals(nvert, (Point3i *)&*coord->values.begin(), index, estimated);
+	estimateNormals<uint32_t>(nvert, (Point3i *)&*coord->values.begin(), nface, start, estimated);
 
 	Point2i *d = (Point2i *)&*diffs.begin();
 	for(uint32_t i = 0; i < nvert; i++)
 		d[i] = toOcta(estimated[i], q);
 
 	if(prediction == BORDER)
-		markBoundary(values.size()/2, index); //mark boundary points on original vertices.
+		markBoundary<uint32_t>(values.size()/2, nface, start, boundary); //mark boundary points on original vertices.
 
 	for(uint32_t i = 0; i < values.size(); i++)
 		values[i] -= diffs[i];
@@ -131,9 +174,9 @@ void NormalAttr::deltaDecode(uint32_t nvert, std::vector<Face> &context) {
 	}
 }
 
-void NormalAttr::postDelta(uint32_t nvert,
+void NormalAttr::postDelta(uint32_t nvert, uint32_t nface,
 						   std::map<std::string, Attribute23 *> &attrs,
-						   std::vector<uint32_t> &index) {
+						   IndexAttr &index) {
 	//for border and estimate we need the position already deltadecoded but before dequantized
 	if(prediction == DIFF)
 		return;
@@ -145,22 +188,27 @@ void NormalAttr::postDelta(uint32_t nvert,
 	if(!coord)
 		throw "Position attr has been overloaded, Use DIFF normal strategy instead.";
 
-
 	vector<Point3f> estimated(nvert, Point3f(0, 0, 0));
-	estimateNormals(nvert, (Point3i *)coord->buffer, index, estimated);
+	if(index.faces32)
+		estimateNormals<uint32_t>(nvert, (Point3i *)coord->buffer, nface, index.faces32, estimated);
+	else
+		estimateNormals<uint16_t>(nvert, (Point3i *)coord->buffer, nface, index.faces16, estimated);
 
-	if(prediction == BORDER)
-		markBoundary(nvert, index);
+	if(prediction == BORDER) {
+		if(index.faces32)
+			markBoundary<uint32_t>(nvert, nface, index.faces32, boundary);
+		else
+			markBoundary<uint16_t>(nvert, nface, index.faces16, boundary);
+	}
 
 	switch(format) {
 	case FLOAT:
-	case INT32:
 		computeNormals((Point3f *)buffer, estimated);
 		break;
 	case INT16:
 		computeNormals((Point3s *)buffer, estimated);
 		break;
-	default: throw "Format not supported for normal attribute (float, int32 or int16 only)";
+	default: throw "Format not supported for normal attribute (float, int16 only)";
 	}
 }
 
@@ -170,7 +218,6 @@ void NormalAttr::dequantize(uint32_t nvert) {
 
 	switch(format) {
 	case FLOAT:
-	case INT32:
 		for(uint32_t i = 0; i < nvert; i++)
 			((Point3f *)buffer)[i] = toSphere(Point2i(diffs[i*2], diffs[i*2 + 1]), (int)q);
 		break;
@@ -178,51 +225,6 @@ void NormalAttr::dequantize(uint32_t nvert) {
 		for(uint32_t i = 0; i < nvert; i++)
 			((Point3s *)buffer)[i] = toSphere(Point2s(diffs[i*2], diffs[i*2 + 1]), (int)q);
 	default: throw "Format not supported for normal attribute (float, int32 or int16 only)";
-	}
-}
-
-//Normal estimation
-
-void NormalAttr::markBoundary(uint32_t nvert, std::vector<uint32_t> &index) {
-	uint32_t nface = index.size()/3;
-	boundary.resize(nvert, false);
-
-	vector<int> count(nvert, 0);
-	for(uint32_t i = 0; i < nface; i++) {
-		uint32_t *f = &index[i*3];
-		count[f[0]] += (int)f[1] - (int)f[2];
-		count[f[1]] += (int)f[2] - (int)f[0];
-		count[f[2]] += (int)f[0] - (int)f[1];
-	}
-	for(uint32_t i = 0; i < nvert; i++)
-		if(count[i] != 0)
-			boundary[i] = true;
-}
-
-
-void NormalAttr::estimateNormals(uint32_t nvert, Point3i *coords, std::vector<uint32_t> &index, std::vector<Point3f> &estimated) {
-	uint32_t nface = index.size()/3;
-
-	estimated.resize(nvert, Point3f(0.0f, 0.0f, 0.0f));
-	for(uint32_t i = 0; i < nface; i++) {
-		uint32_t *f = &index[i*3];
-		Point3i &p0 = coords[f[0]];
-		Point3i &p1 = coords[f[1]];
-		Point3i &p2 = coords[f[2]];
-		Point3i qn = (( p1 - p0) ^ (p2 - p0));
-		Point3f n(qn[0], qn[1], qn[2]);
-		estimated[f[0]] += n;
-		estimated[f[1]] += n;
-		estimated[f[2]] += n;
-	}
-	for(uint32_t i = 0; i < nvert; i++) {
-		Point3f &n = estimated[i];
-		float len = n.norm();
-		if(len < 0.00001f) {
-			n = Point3f(0.0f, 0.0f, 1.0f);
-			continue;
-		}
-		n /= len;
 	}
 }
 

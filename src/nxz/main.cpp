@@ -66,7 +66,7 @@ int main(int argc, char *argv[]) {
 
 	nx::NxzEncoder encoder(nvert, nface, nx::Stream::TUNSTALL);
 	encoder.addPositions((float *)&*coords.begin(), &*index.begin());
-	encoder.addNormals((float *)&*normals.begin(), 10, nx::NormalAttr::ESTIMATED);
+	encoder.addNormals((float *)&*normals.begin(), 10, nx::NormalAttr::BORDER);
 	encoder.addColors((unsigned char *)&*colors.begin());
 	encoder.encode();
 
@@ -97,7 +97,7 @@ int main(int argc, char *argv[]) {
 	}
 
 
-	cout << "Face bpv; " << 8.0f*encoder.index_size/nvert << endl;
+	cout << "Face bpv; " << 8.0f*encoder.index.size/nvert << endl;
 
 	std::vector<vcg::Point3f> recoords(nvert);
 	std::vector<vcg::Point3f> renorms(nvert, Point3f(0, 0, 0));

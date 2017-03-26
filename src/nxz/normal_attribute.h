@@ -21,7 +21,7 @@ public:
 	}
 
 	virtual void quantize(uint32_t nvert, char *buffer);
-	virtual void preDelta(uint32_t nvert, std::map<std::string, Attribute23 *> &attrs, std::vector<uint32_t> &index);
+	virtual void preDelta(uint32_t nvert,  uint32_t nface, std::map<std::string, Attribute23 *> &attrs, IndexAttr &index);
 	virtual void deltaEncode(std::vector<Quad> &context);
 	virtual void encode(uint32_t /*nvert*/, Stream &stream) {
 		stream.write<uchar>(prediction);
@@ -30,13 +30,10 @@ public:
 
 	virtual void decode(uint32_t nvert, Stream &stream);
 	virtual void deltaDecode(uint32_t nvert, std::vector<Face> &context);
-	virtual void postDelta(uint32_t nvert, std::map<std::string, Attribute23 *> &attrs, std::vector<uint32_t> &index);
+	virtual void postDelta(uint32_t nvert,  uint32_t nface, std::map<std::string, Attribute23 *> &attrs, IndexAttr &index);
 	virtual void dequantize(uint32_t nvert);
 
 	//Normal estimation
-
-	void markBoundary(uint32_t nvert, std::vector<uint32_t> &index);
-	void estimateNormals(uint32_t nvert, Point3i *_coords, std::vector<uint32_t> &index, std::vector<Point3f> &estimated);
 	void computeNormals(Point3s *normals, std::vector<Point3f> &estimated);
 	void computeNormals(Point3f *normals, std::vector<Point3f> &estimated);
 

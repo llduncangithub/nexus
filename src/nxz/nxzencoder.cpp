@@ -40,7 +40,7 @@ NxzEncoder::NxzEncoder(uint32_t _nvert, uint32_t _nface, Stream::Entropy entropy
 	header_size(0), current_vertex(0) {
 
 	stream.entropy = entropy;
-	index.resize(nface*3);
+	index.faces.resize(nface*3);
 }
 
 //TODO optional checking for invalid (nan, infinity) values.
@@ -74,14 +74,13 @@ bool NxzEncoder::addPositions(float *buffer, float q, Point3f o) {
 
 /* if not q specified use 1/10th of average leght of edge  */
 bool NxzEncoder::addPositions(float *buffer, uint32_t *_index, float q, Point3f o) {
-	index.resize(nface*3);
-	memcpy(&*index.begin(), _index,  nface*12);
+	memcpy(&*index.faces.begin(), _index,  nface*12);
 
 	Point3f *coords = (Point3f *)buffer;
 	if(q == 0) { //estimate quantization on edge length average.
 		double average = 0; //for precision when using large number of faces
 		for(uint32_t f = 0; f < nface*3; f += 3)
-			average += (coords[index[f]] - coords[index[f+1]]).norm();
+			average += (coords[_index[f]] - coords[_index[f+1]]).norm();
 		q = (float)(average/nface)/20.0f;
 	}
 	return addPositions(buffer, q, o);
@@ -149,6 +148,26 @@ bool NxzEncoder::addUV(float *buffer, float q) {
 	if(!ok) delete uv;
 	return ok;
 }
+
+bool NxzEncoder::addAttribute(const char *name, char *buffer, Attribute23::Format format, int components, float q, uint32_t strategy) {
+	if(data.count(name)) return false;
+	GenericAttr<int> *attr = new GenericAttr<int>(components);
+
+	attr->q = q;
+	attr->strategy = strategy;
+	attr->format = format;
+	attr->quantize(nvert, (char *)buffer);
+	data[name] = attr;
+	return true;
+}
+//whatever is inside is your job to fill attr variables.
+bool NxzEncoder::addAttribute(const char *name, char *buffer, Attribute23 *attr) {
+	if(data.count(name)) return true;
+	attr->quantize(nvert, buffer);
+	data[name] = attr;
+	return true;
+}
+
 
 void NxzEncoder::encode() {
 	stream.reserve(nvert);
@@ -218,7 +237,7 @@ void NxzEncoder::encodePointCloud() {
 		prediction[i] = Quad(zpoints[i].pos, zpoints[i-1].pos, zpoints[i-1].pos, zpoints[i-1].pos);
 
 	for(auto it: data)
-		it.second->preDelta(nvert, data, index);
+		it.second->preDelta(nvert, nface, data, index);
 
 	for(auto it: data)
 		it.second->deltaEncode(prediction);
@@ -243,19 +262,19 @@ void NxzEncoder::encodePointCloud() {
 void NxzEncoder::encodeMesh() {
 	encoded.resize(nvert, -1);
 
-	if(!groups.size()) groups.push_back(nface);
+	if(!index.groups.size()) index.groups.push_back(nface);
 	//remove degenerate faces
 	uint32_t start =  0;
 	uint32_t count = 0;
-	for(uint32_t &end: groups) {
+	for(uint32_t &end: index.groups) {
 		for(uint32_t i = start; i < end; i++) {
-			uint32_t *f = &index[i*3];
+			uint32_t *f = &index.faces[i*3];
 
 			if(f[0] == f[1] || f[0] == f[2] || f[1] == f[2])
 				continue;
 
 			if(count != i) {
-				uint32_t *dest = &index[count*3];
+				uint32_t *dest = &index.faces[count*3];
 				dest[0] = f[0];
 				dest[1] = f[1];
 				dest[2] = f[2];
@@ -265,17 +284,18 @@ void NxzEncoder::encodeMesh() {
 		start = end;
 		end = count;
 	}
-	index.resize(count*3);
+	index.faces.resize(count*3);
 	nface = count;
 
 
 
-	BitStream bitstream(nvert/4);
+	//BitStream bitstream(nvert/4);
+	index.bitstream.reserve(nvert/4);
 	prediction.resize(nvert);
 
 	start =  0;
-	for(uint32_t &end: groups) {
-		encodeFaces(start, end, bitstream);
+	for(uint32_t &end: index.groups) {
+		encodeFaces(start, end);
 		start = end;
 	}
 #ifdef PRESERVED_UNREFERENCED
@@ -295,22 +315,20 @@ void NxzEncoder::encodeMesh() {
 	stream.write<int>(nvert);
 	stream.write<int>(nface);
 
-	stream.write<int>(groups.size());
+/*	stream.write<int>(groups.size());
 	for(uint32_t &end: groups)
-		stream.write<int>(end);
+		stream.write<int>(end); */
 
 	header_size = stream.elapsed();
 
 	for(auto it: data)
-		it.second->preDelta(nvert, data, index);
+		it.second->preDelta(nvert, nface, data, index);
 
 	for(auto it: data)
 		it.second->deltaEncode(prediction);
 
 
-	stream.compress(clers.size(), &*clers.begin());
-	stream.write(bitstream);
-	index_size = stream.elapsed();
+	index.encode(stream);
 
 	for(auto it: data)
 		it.second->encode(nvert, stream);
@@ -424,11 +442,11 @@ static int prev_(int t) {
 	return t;
 }
 
-void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
+void NxzEncoder::encodeFaces(int start, int end) {
 
 	vector<McFace> faces(end - start);
 	for(int i = start; i < end; i++) {
-		uint32_t * f = &index[i*3];
+		uint32_t * f = &index.faces[i*3];
 		faces[i - start] = McFace(f[0], f[1], f[2]);
 		assert(f[0] != f[1] && f[1] != f[2] && f[2] != f[0]);
 	}
@@ -472,8 +490,8 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 			}
 
 			if(split) {
-				clers.push_back(SPLIT);
-				bitstream.writeUint(split, 3);
+				index.clers.push_back(SPLIT);
+				index.bitstream.writeUint(split, 3);
 			}
 
 			for(int k = 0; k < 3; k++) {
@@ -481,7 +499,7 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 				int &enc = encoded[vindex];
 
 				if(enc != -1) {
-					bitstream.writeUint(enc, splitbits);
+					index.bitstream.writeUint(enc, splitbits);
 				} else {
 					//quad uses presorting indexing. (diff in attribute are sorted, values are not).
 					prediction[current_vertex] = Quad(vindex, last_index, last_index, last_index);
@@ -521,7 +539,7 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 		int opposite_side = faces[e.face].i[e.side];
 
 		if(opposite_face == 0xffffffff || visited[opposite_face]) { //boundary edge or glue
-			clers.push_back(BOUNDARY);
+			index.clers.push_back(BOUNDARY);
 			continue;
 		}
 
@@ -545,14 +563,14 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 		bool close_right = (faces[next_edge.face].t[next_edge.side] == opposite_face);
 
 		if(close_left && close_right) {
-			clers.push_back(END);
+			index.clers.push_back(END);
 			previous_edge.deleted = true;
 			next_edge.deleted = true;
 			front[previous_edge.prev].next = next_edge.next;
 			front[next_edge.next].prev = previous_edge.prev;
 
 		} else if(close_left) {
-			clers.push_back(LEFT);
+			index.clers.push_back(LEFT);
 			previous_edge.deleted = true;
 			front[previous_edge.prev].next = first_edge;
 			front[enext].prev = first_edge;
@@ -560,7 +578,7 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 			front.emplace_back(opposite_face, k1, previous_edge.prev, enext);
 
 		} else if(close_right) {
-			clers.push_back(RIGHT);
+			index.clers.push_back(RIGHT);
 			next_edge.deleted = true;
 			front[next_edge.next].prev = first_edge;
 			front[eprev].next = first_edge;
@@ -575,13 +593,13 @@ void NxzEncoder::encodeFaces(int start, int end, BitStream &bitstream) {
 			if(encoded[opposite] != -1 && faceorder.size()) { //split, but we can still delay it.
 				e.deleted = false; //undelete it.
 				delayed.push_back(c);
-				clers.push_back(DELAY);
+				index.clers.push_back(DELAY);
 				continue;
 			}
-			clers.push_back(VERTEX);
+			index.clers.push_back(VERTEX);
 			if(encoded[opposite] != -1) {
-				clers.push_back(SPLIT);
-				bitstream.writeUint(encoded[opposite], splitbits);
+				index.clers.push_back(SPLIT);
+				index.bitstream.writeUint(encoded[opposite], splitbits);
 
 			} else {
 				//vertex needed for parallelogram prediction

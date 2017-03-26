@@ -37,8 +37,7 @@ public:
 		v0(a), v1(b), v2(c), prev(p), next(n), deleted(false) {}
 };
 
-NxzDecoder::NxzDecoder(int len, uchar *input):
-	short_normals(false), short_index(false), vertex_count(0) {
+NxzDecoder::NxzDecoder(int len, uchar *input): vertex_count(0) {
 
 	stream.init(len, input);
 	stream.entropy = (Stream::Entropy)stream.read<uchar>();
@@ -130,13 +129,7 @@ void NxzDecoder::decodePointCloud() {
 	*/
 
 void NxzDecoder::decodeMesh() {
-	groups.resize(stream.read<int>());
-	for(uint32_t &g: groups)
-		g = stream.read<int>();
-
-	stream.decompress(clers);
-	BitStream bitstream;
-	stream.read(bitstream);
+	index.decode(stream);
 
 	for(auto it: data)
 		it.second->decode(nvert, stream);
@@ -145,8 +138,8 @@ void NxzDecoder::decodeMesh() {
 
 	uint32_t start = 0;
 	uint32_t cler = 0; //keeps track of current cler
-	for(uint32_t &end: groups) {
-		decodeFaces(start*3, end*3, cler, bitstream);
+	for(uint32_t &end: index.groups) {
+		decodeFaces(start*3, end*3, cler);
 		start = end;
 	}
 #ifdef PRESERVED_UNREFERENCED
@@ -160,19 +153,8 @@ void NxzDecoder::decodeMesh() {
 	for(auto it: data)
 		it.second->deltaDecode(nvert, prediction);
 
-	//TODO cleanup this mess.
-	std::vector<uint32_t> index(nface*3);
-	uint16_t *faces16 = ((uint16_t *)face.buffer);
-	uint32_t *faces32 = ((uint32_t *)face.buffer);
-	if(short_index)
-		for(uint32_t i = 0; i < nface*3; i++)
-			index[i] = faces16[i];
-	else
-		for(uint32_t i = 0; i < nface*3; i++)
-			index[i] = faces32[i];
-
 	for(auto it: data)
-		it.second->postDelta(nvert, data, index);
+		it.second->postDelta(nvert, nface, data, index);
 
 	for(auto it: data)
 		it.second->dequantize(nvert);
@@ -184,10 +166,7 @@ static int ilog2(uint64_t p) {
 	return k;
 }
 
-void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitStream &bitstream) {
-
-	uint16_t *faces16 = ((uint16_t *)face.buffer);
-	uint32_t *faces32 = ((uint32_t *)face.buffer);
+void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler) {
 
 	//edges of the mesh to be processed
 	vector<DEdge2> front;
@@ -210,36 +189,36 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 		if(new_edge == -1 && order >= faceorder.size() && !delayed.size()) {
 
 			int last_index = vertex_count-1;
-			int index[3];
+			int vindex[3];
 
 			int split =  0; //bitmask for vertex already decoded/
-			if(clers[cler] == SPLIT) { //lookahead
+			if(index.clers[cler] == SPLIT) { //lookahead
 				cler++;
-				split = bitstream.readUint(3);
+				split = index.bitstream.readUint(3);
 			}
 
 			for(int k = 0; k < 3; k++) {
 				int v; //TODO just use last_index.
 				if(split & (1<<k))
-					v = bitstream.readUint(splitbits);
+					v = index.bitstream.readUint(splitbits);
 				else {
 					assert(vertex_count < (int)prediction.size());
 					prediction[vertex_count] = Face(last_index, last_index, last_index);
 					last_index = v = vertex_count++;
 				}
-				index[k] = v;
-				if(short_index)
-					faces16[start++] = v;
+				vindex[k] = v;
+				if(index.faces16)
+					index.faces16[start++] = v;
 				else
-					faces32[start++] = v;
+					index.faces32[start++] = v;
 			}
 			int current_edge = front.size();
 			faceorder.push_back(front.size());
-			front.emplace_back(index[1], index[2], index[0], current_edge + 2, current_edge + 1);
+			front.emplace_back(vindex[1], vindex[2], vindex[0], current_edge + 2, current_edge + 1);
 			faceorder.push_back(front.size());
-			front.emplace_back(index[2], index[0], index[1], current_edge + 0, current_edge + 2);
+			front.emplace_back(vindex[2], vindex[0], vindex[1], current_edge + 0, current_edge + 2);
 			faceorder.push_back(front.size());
-			front.emplace_back(index[0], index[1], index[2], current_edge + 1, current_edge + 0);
+			front.emplace_back(vindex[0], vindex[1], vindex[2], current_edge + 1, current_edge + 0);
 			continue;
 		}
 
@@ -262,7 +241,7 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 		if(e.deleted) continue;
 		//e.deleted = true; //each edge is processed once at most.
 
-		int c = clers[cler++];
+		int c = index.clers[cler++];
 		if(c == BOUNDARY) continue;
 
 		int v0 = e.v0;
@@ -275,9 +254,9 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 		int opposite = -1;
 
 		if(c == VERTEX) {
-			if(clers[cler] == SPLIT) { //lookahead
+			if(index.clers[cler] == SPLIT) { //lookahead
 				cler++;
-				opposite = bitstream.readUint(splitbits);
+				opposite = index.bitstream.readUint(splitbits);
 			} else {
 				//Edge is inverted respect to encoding hence v1-v0 inverted.
 				prediction[vertex_count] = Face(v1, v0, e.v2);
@@ -328,14 +307,14 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitSt
 		assert(v1 != opposite);
 		assert(v0 != opposite);
 
-		if(short_index) {
-			faces16[start++] = v1;
-			faces16[start++] = v0;
-			faces16[start++] = opposite;
+		if(index.faces16) {
+			index.faces16[start++] = v1;
+			index.faces16[start++] = v0;
+			index.faces16[start++] = opposite;
 		} else {
-			faces32[start++] = v1;
-			faces32[start++] = v0;
-			faces32[start++] = opposite;
+			index.faces32[start++] = v1;
+			index.faces32[start++] = v0;
+			index.faces32[start++] = opposite;
 		}
 	}
 }

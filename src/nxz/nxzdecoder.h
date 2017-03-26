@@ -37,8 +37,10 @@ class NxzDecoder {
 public:
 	uint32_t nvert, nface;
 
+	//std::vector<uint32_t> groups;
 	std::map<std::string, Attribute23 *> data;
-	Attribute<int> face; //turn this into a different class: with face32 and face16 pointers.
+	IndexAttr index;
+	//Attribute<int> face; //turn this into a different class: with face32 and face16 pointers.
 
 
 	NxzDecoder(int len, uchar *input);
@@ -54,29 +56,21 @@ public:
 	bool setAttribute(const char *name, char *buffer, Attribute23::Format format);
 	bool setAttribute(const char *name, char *buffer, Attribute23 *attr);
 
-	void setIndex(uint32_t *buffer) {face.buffer = buffer; }
-	void setIndex(int16_t *buffer) {
-		face.buffer = buffer;
-		short_index = true;
-	}
+	void setIndex(uint32_t *buffer) { index.faces32 = buffer; }
+	void setIndex(uint16_t *buffer) { index.faces16 = buffer; }
 
 	void decode();
 
 private:
 	Stream stream;
 
-	bool short_normals;
-	bool short_index;
-
-	std::vector<uint32_t> groups;
-	std::vector<uchar> clers;
 	std::vector<Face> prediction;
 
 	int vertex_count; //keep tracks of current decoding vertex
 
 	void decodePointCloud();
 	void decodeMesh();
-	void decodeFaces(uint32_t start, uint32_t end, uint32_t &cler, BitStream &bitstream);
+	void decodeFaces(uint32_t start, uint32_t end, uint32_t &cler);
 };
 
 

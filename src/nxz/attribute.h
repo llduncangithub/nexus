@@ -7,6 +7,39 @@
 
 namespace nx {
 
+class IndexAttr {
+public:
+	uint32_t *faces32;
+	uint16_t *faces16;
+	std::vector<uint32_t> faces;
+
+	std::vector<uint32_t> groups;
+	std::vector<uchar> clers;
+	BitStream bitstream;
+	uint32_t size;
+
+	IndexAttr(): faces32(nullptr), faces16(nullptr) {}
+	void encode(Stream &stream) {
+		stream.write<uint32_t>(groups.size());
+		for(uint32_t &g: groups)
+			stream.write<uint32_t>(g);
+
+		stream.restart();
+		stream.compress(clers.size(), &*clers.begin());
+		stream.write(bitstream);
+		size = stream.elapsed();
+	}
+
+	void decode(Stream &stream) {
+		groups.resize(stream.read<uint32_t>());
+		for(uint32_t &g: groups)
+			g = stream.read<uint32_t>();
+
+		stream.decompress(clers);
+		stream.read(bitstream);
+	}
+};
+
 class Attribute23 {
 public:
 	enum Format { UINT32, INT32, UINT16, INT16, UINT8, INT8, FLOAT, DOUBLE };
@@ -27,18 +60,18 @@ public:
 	//quantize and store as values
 	virtual void quantize(uint32_t nvert, char *buffer) = 0;
 	//used by attributes which leverage other attributes
-	virtual void preDelta(uint32_t /*nvert*/, std::map<std::string, Attribute23 *> &/*attrs*/, std::vector<uint32_t> &/*index*/) {}
+	virtual void preDelta(uint32_t /*nvert*/, uint32_t /*nface*/, std::map<std::string, Attribute23 *> &/*attrs*/, IndexAttr &/*index*/) {}
 	//use parallelogram prediction or just diff from v0
 	virtual void deltaEncode(std::vector<Quad> &context) = 0;
 	//compress diffs and write to stream
 	virtual void encode(uint32_t nvert, Stream &stream) = 0;
 
-	//read quantized data from stream
+	//read quantized data from streams
 	virtual void decode(uint32_t nvert, Stream &stream) = 0;
 	//use parallelogram prediction to recover values
 	virtual void deltaDecode(uint32_t nvert, std::vector<Face> &faces) = 0;
 	//use other attributes to estimate (normals for example)
-	virtual void postDelta(uint32_t /*nvert*/, std::map<std::string, Attribute23 *> &/*attrs*/, std::vector<uint32_t> &/*index*/) {}
+	virtual void postDelta(uint32_t /*nvert*/, uint32_t /*nface*/, std::map<std::string, Attribute23 *> &/*attrs*/, IndexAttr &/*index*/) {}
 	//reverse quantization operations
 	virtual void dequantize(uint32_t nvert) = 0;
 };

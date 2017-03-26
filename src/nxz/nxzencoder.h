@@ -38,14 +38,16 @@ public:
 	//uint32_t flags; //keeps track of what is inside
 	uint32_t nvert, nface;
 
+	IndexAttr index;
 /*	Attribute<Point3i> coord;
 	Attribute<Point2i> norm;
 	Attribute<unsigned char> color[4];
 	Attribute<Point2i> uv; */
 	std::map<std::string, Attribute23 *> data;
 
-	std::vector<uint32_t> index;
-	int index_size;
+
+	//std::vector<uint32_t> index;
+	//int index_size;
 	int header_size;
 
 //	Normals normals_prediction;
@@ -65,32 +67,17 @@ public:
 
 	bool addUV(float *buffer, float q = 0);
 
-	bool addAttribute(const char *name, char *buffer, Attribute23::Format format, int components, float q, uint32_t strategy) {
-		if(data.count(name)) return false;
-		GenericAttr<int> *attr = new GenericAttr<int>(components);
-
-		attr->q = q;
-		attr->strategy = strategy;
-		attr->format = format;
-		attr->quantize(nvert, (char *)buffer);
-		data[name] = attr;
-		return true;
-	}
+	bool addAttribute(const char *name, char *buffer, Attribute23::Format format, int components, float q, uint32_t strategy);
 	//whatever is inside is your job to fill attr variables.
-	bool addAttribute(const char *name, char *buffer, Attribute23 *attr) {
-		if(data.count(name)) return true;
-		attr->quantize(nvert, buffer);
-		data[name] = attr;
-		return true;
-	}
+	bool addAttribute(const char *name, char *buffer, Attribute23 *attr);
 
-	void addGroup(int end_triangle) { groups.push_back(end_triangle); }
+	void addGroup(int end_triangle) { index.groups.push_back(end_triangle); }
 
 	void encode();
 
 private:
-	std::vector<uint32_t> groups;
-	std::vector<uchar> clers;
+	//std::vector<uint32_t> groups;
+	//std::vector<uchar> clers;
 	int current_vertex;
 
 	std::vector<bool> boundary;
@@ -104,7 +91,7 @@ private:
 //	void encodeZPoints(std::vector<ZPoint> &zpoints);
 
 	void encodeMesh();
-	void encodeFaces(int start, int end, BitStream &bitstream);
+	void encodeFaces(int start, int end);
 
 /*	void encodeCoords();
 	void encodeNormals();
