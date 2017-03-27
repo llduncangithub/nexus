@@ -47,7 +47,7 @@ template <class T> void estimateNormals(uint32_t nvert, Point3i *coords, uint32_
 }
 
 void NormalAttr::quantize(uint32_t nvert, char *buffer) {
-	uint32_t n = N*nvert;
+	uint32_t n = 2*nvert;
 
 	values.resize(n);
 	diffs.resize(n);
@@ -116,14 +116,14 @@ void NormalAttr::deltaEncode(std::vector<Quad> &context) {
 
 		for(uint32_t i = 1; i < context.size(); i++) {
 			Quad &quad = context[i];
-			for(int c = 0; c < N; c++) {
-				int &d = diffs[i*N + c];
-				d = values[quad.t*N + c] - values[quad.a*N + c];
+			for(int c = 0; c < 2; c++) {
+				int &d = diffs[i*2 + c];
+				d = values[quad.t*2 + c] - values[quad.a*2 + c];
 				if(d < -q)     d += 2*q;
 				else if(d > q) d -= 2*q;
 			}
 		}
-		diffs.resize(context.size()*N); //unreferenced vertices
+		diffs.resize(context.size()*2); //unreferenced vertices
 
 	} else  {//just reorder diffs, for border story only boundary diffs
 		uint32_t count = 1;
@@ -131,19 +131,26 @@ void NormalAttr::deltaEncode(std::vector<Quad> &context) {
 		for(uint32_t i = 1; i < context.size(); i++) {
 			Quad &quad = context[i];
 			if(prediction != BORDER || boundary[i]) {
-				for(int c = 0; c < N; c++)
-					diffs[count*N + c] = values[quad.t*N + c];
+				for(int c = 0; c < 2; c++)
+					diffs[count*2 + c] = values[quad.t*2 + c];
 				count++;
 			}
 		}
-		diffs.resize(count*N); //unreferenced vertices and borders
+		diffs.resize(count*2); //unreferenced vertices and borders
 	}
+}
+
+void NormalAttr::encode(uint32_t nvert, Stream &stream) {
+	stream.write<uchar>(prediction);
+	stream.restart();
+	stream.encodeArray<int32_t>(nvert, &*diffs.begin(), 2);
+	size = stream.elapsed();
 }
 
 void NormalAttr::decode(uint32_t nvert, Stream &stream) {
 	prediction = stream.read<uchar>();
 	diffs.resize(nvert*2);
-	int readed = stream.decodeArray<int32_t>(&*diffs.begin(), N);
+	int readed = stream.decodeArray<int32_t>(&*diffs.begin(), 2);
 
 	if(prediction == BORDER)
 		diffs.resize(readed*2);
@@ -254,7 +261,7 @@ void NormalAttr::computeNormals(Point3f *normals, std::vector<Point3f> &estimate
 	/*	Point3f tn(0.7, 0.7, 0);
 	Point2i tq = toOcta(tn, (int)q);
 	tn = toSphere(tq, (int)q);
-	cout << "TQ: " <<	tq[0] << " " << tq[1] << " N: " << tn[0] << " " << tn[1] << " " << tn[2] << endl;*/
+	cout << "TQ: " <<	tq[0] << " " << tq[1] << " 2: " << tn[0] << " " << tn[1] << " " << tn[2] << endl;*/
 
 	Point2i *diffp = (Point2i *)&*diffs.begin();
 	int count = 0; //here for the border.

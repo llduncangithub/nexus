@@ -42,7 +42,7 @@ public:
 
 class Attribute23 {
 public:
-	enum Format { UINT32, INT32, UINT16, INT16, UINT8, INT8, FLOAT, DOUBLE };
+	enum Format { UINT32 = 0, INT32, UINT16, INT16, UINT8, INT8, FLOAT, DOUBLE };
 	enum Strategy { PARALLEL = 0x1, CORRELATED = 0x2 };
 
 	char *buffer;     //output data buffer, input is not needed

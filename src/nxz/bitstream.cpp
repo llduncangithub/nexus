@@ -25,20 +25,20 @@ using namespace std;
 using namespace nx;
 // usage: bmask[k] has the rightmost k bits == 1, other bits 0
 //
-static uint64_t bmask[] = {
+static uint32_t bmask[] = {
 	0x00,     0x01,       0x03,        0x07,        0x0f,       0x01f,       0x03f,       0x07f,
 	0xff,     0x01ff,     0x03ff,      0x07ff,      0x0fff,     0x01fff,     0x03fff,     0x07fff,
 	0xffff,   0x01ffff,   0x03ffff,    0x07ffff,    0x0fffff,   0x01fffff,   0x03fffff,   0x07fffff,
-	0xffffff, 0x01ffffff, 0x03ffffff,  0x07ffffff,  0x0fffffff, 0x01fffffff, 0x03fffffff, 0x7fffffff,
+        0xffffff, 0x01ffffff, 0x03ffffff,  0x07ffffff,  0x0fffffff, 0x01fffffff, 0x03fffffff, 0x7fffffff };
 
-	0xffffffff,       0x01ffffffff,       0x03ffffffff,        0x07ffffffff,        0x0fffffffff,       0x01fffffffff,       0x03fffffffff,       0x07fffffffff,
+/*	0xffffffff,       0x01ffffffff,       0x03ffffffff,        0x07ffffffff,        0x0fffffffff,       0x01fffffffff,       0x03fffffffff,       0x07fffffffff,
 	0xffffffffff,     0x01ffffffffff,     0x03ffffffffff,      0x07ffffffffff,      0x0fffffffffff,     0x01fffffffffff,     0x03fffffffffff,     0x07fffffffffff,
 	0xffffffffffff,   0x01ffffffffffff,   0x03ffffffffffff,    0x07ffffffffffff,    0x0fffffffffffff,   0x01fffffffffffff,   0x03fffffffffffff,   0x07fffffffffffff,
 	0xffffffffffffff, 0x01ffffffffffffff, 0x03ffffffffffffff,  0x07ffffffffffffff,  0x0fffffffffffffff, 0x01fffffffffffffff, 0x03fffffffffffffff, 0x07fffffffffffffff,
 
-	0xffffffffffffffff };
+        0xffffffffffffffff }; */
 
-#define BITS_PER_WORD 64
+#define BITS_PER_WORD 32
 
 
 //TODO is it faster using bmask or using ~((1L<<d)-1)?
@@ -49,7 +49,7 @@ BitStream::BitStream(int reserved) { //for write
 
 }
 
-BitStream::BitStream(int _size, uint64_t *_buffer) { //for read
+BitStream::BitStream(int _size, uint32_t *_buffer) { //for read
 	init(_size, _buffer);
 
 }
@@ -59,7 +59,7 @@ BitStream::~BitStream() {
 		delete []buffer;
 }
 
-void BitStream::init(int _size, uint64_t *_buffer) { //in uint64_t units for reading
+void BitStream::init(int _size, uint32_t *_buffer) { //in uint32_t units for reading
 	buffer = _buffer;
 	size = _size;
 	allocated = 0;
@@ -68,21 +68,21 @@ void BitStream::init(int _size, uint64_t *_buffer) { //in uint64_t units for rea
 	pos = buffer;
 }
 
-void BitStream::reserve(int reserved) { //in uint64_t units for reading
+void BitStream::reserve(int reserved) { //in uint32_t units for reading
 	allocated = reserved;
-	pos = buffer = new uint64_t[allocated];
+        pos = buffer = new uint32_t[allocated];
 	size = 0;
 	buff = 0;
 	bits = BITS_PER_WORD;
 	pos = buffer;
 }
 
-uint64_t BitStream::writtenBits() {
+uint32_t BitStream::writtenBits() {
 	return (size+1)*BITS_PER_WORD - bits;
 }
 
 //TODO change name but the bmask is useless
-void BitStream::writeUint(uint64_t value, int numbits) {
+void BitStream::writeUint(uint32_t value, int numbits) {
 	if(!allocated) reserve(256);
 	if (numbits >= bits) {
 		buff = (buff << bits) | (value >> (numbits - bits));
@@ -99,7 +99,7 @@ void BitStream::writeUint(uint64_t value, int numbits) {
 	}
 }
 
-void BitStream::write(uint64_t value, int numbits) {
+void BitStream::write(uint32_t value, int numbits) {
 	if(!allocated) reserve(256);
 	value &= bmask[numbits];
 	if (numbits >= bits) {
@@ -117,9 +117,9 @@ void BitStream::write(uint64_t value, int numbits) {
 	}
 }
 
-uint64_t BitStream::readUint(int numbits) {
+uint32_t BitStream::readUint(int numbits) {
 	assert(numbits > 0);
-	uint64_t ret = 0;
+        uint32_t ret = 0;
 
 	if (numbits > bits){
 		ret |= buff << (numbits - bits);
@@ -135,10 +135,10 @@ uint64_t BitStream::readUint(int numbits) {
 	return ret;
 }
 
-void BitStream::read(int numbits, uint64_t &retval) {
+void BitStream::read(int numbits, uint32_t &retval) {
 	assert(!allocated);
 	retval &= ~bmask[numbits];
-	uint64_t ret = 0;
+        uint32_t ret = 0;
 
 	if (numbits > bits){
 		ret |= buff << (numbits - bits);
@@ -161,10 +161,10 @@ void BitStream::flush() {
 	}
 }
 
-void BitStream::push_back(uint64_t w) {
+void BitStream::push_back(uint32_t w) {
 	if(size >= allocated) {
-		uint64_t *b = new uint64_t[allocated*2];
-		memcpy(b, buffer, allocated*sizeof(uint64_t));
+                uint32_t *b = new uint32_t[allocated*2];
+                memcpy(b, buffer, allocated*sizeof(uint32_t));
 		delete []buffer;
 		buffer = b;
 		allocated *= 2;

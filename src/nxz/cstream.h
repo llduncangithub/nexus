@@ -114,7 +114,7 @@ public:
 			pad = 4 - pad;
 		grow(pad);
 		pos += pad;
-		push(stream.buffer, stream.size*sizeof(uint64_t));
+		push(stream.buffer, stream.size*sizeof(uint32_t));
 	}
 
 
@@ -144,8 +144,8 @@ public:
 		int pad = (pos - buffer) & 0x3;
 		if(pad != 0)
 			pos += 4 - pad;
-		stream.init(s, (uint64_t *)pos);
-		pos += s*sizeof(uint64_t);
+		stream.init(s, (uint32_t *)pos);
+		pos += s*sizeof(uint32_t);
 	}
 
 	void grow(int s) {

@@ -40,12 +40,15 @@ public:
 NxzDecoder::NxzDecoder(int len, uchar *input): vertex_count(0) {
 
 	stream.init(len, input);
+	uint32_t magic = stream.read<uint32_t>();
+	if(magic != 0x787A6300)
+		throw "Not an nxz file.";
+	uint32_t version = stream.read<uint32_t>();
 	stream.entropy = (Stream::Entropy)stream.read<uchar>();
 
 	int nattr = stream.read<int>();
 
 	for(int i = 0; i < nattr; i++) {
-
 		std::string name =  stream.readString();
 		float q = stream.read<float>();
 		uint32_t components = stream.read<uchar>();
@@ -106,7 +109,7 @@ void NxzDecoder::decodePointCloud() {
 		it.second->decode(nvert, stream);
 	for(auto it: data)
 		it.second->deltaDecode(nvert, dummy);
-/*	for(auto it: data)
+	/*	for(auto it: data)
 		it.second->postDelta(nvert, dummy); */
 	for(auto it: data)
 		it.second->dequantize(nvert);

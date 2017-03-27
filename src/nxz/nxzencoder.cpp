@@ -172,7 +172,8 @@ bool NxzEncoder::addAttribute(const char *name, char *buffer, Attribute23 *attr)
 void NxzEncoder::encode() {
 	stream.reserve(nvert);
 
-//	stream.write<int>(flags);
+	stream.write<uint32_t>(0x787A6300);
+	stream.write<uint32_t>(0x1); //version
 	stream.write<uchar>(stream.entropy);
 
 	stream.write<int>(data.size());

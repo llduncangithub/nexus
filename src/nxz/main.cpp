@@ -70,6 +70,8 @@ int main(int argc, char *argv[]) {
 	encoder.addColors((unsigned char *)&*colors.begin());
 	encoder.encode();
 
+
+
 	nvert = encoder.nvert;
 	nface = encoder.nface;
 
@@ -108,7 +110,7 @@ int main(int argc, char *argv[]) {
 	QTime time;
 	time.start();
 
-	int iter = 100;
+	int iter = 10;
 	for(int i = 0; i < iter; i++) {
 		nx::NxzDecoder decoder(encoder.stream.size(), encoder.stream.data());
 		decoder.setPositions((float *)&*recoords.begin());

@@ -6,15 +6,17 @@
 
 namespace nx {
 
-class NormalAttr: public GenericAttr<int> {
+class NormalAttr: public Attribute23 {
 public:
 	enum Prediction { DIFF = 0x0,      //do not estimate normals, use diffs to previous
 					  ESTIMATED = 0x1, //estimate normals then encode differences
 					  BORDER = 0x2 };  //encode differences only on the boundary
 	uint32_t prediction;
 	std::vector<bool> boundary;
+	std::vector<int32_t> values, diffs;
 
-	NormalAttr(int bits = 10): GenericAttr<int>(2) {
+	NormalAttr(int bits = 10) {
+		N = 3;
 		q = pow(2, bits-1);
 		prediction = DIFF;
 		strategy |= Attribute23::CORRELATED;
@@ -23,10 +25,7 @@ public:
 	virtual void quantize(uint32_t nvert, char *buffer);
 	virtual void preDelta(uint32_t nvert,  uint32_t nface, std::map<std::string, Attribute23 *> &attrs, IndexAttr &index);
 	virtual void deltaEncode(std::vector<Quad> &context);
-	virtual void encode(uint32_t /*nvert*/, Stream &stream) {
-		stream.write<uchar>(prediction);
-		GenericAttr<int>::encode(diffs.size()/2, stream); //border encode only border diffs
-	}
+	virtual void encode(uint32_t nvert, Stream &stream);
 
 	virtual void decode(uint32_t nvert, Stream &stream);
 	virtual void deltaDecode(uint32_t nvert, std::vector<Face> &context);

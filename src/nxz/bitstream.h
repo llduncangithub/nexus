@@ -26,31 +26,31 @@ namespace nx {
 class BitStream {
 public:
 	BitStream(): size(0), buffer(0), allocated(0), pos(0), buff(0), bits(0) {}
-	BitStream(int reserved); // in uint64_t units
-	BitStream(int size, uint64_t *buffer); //for reading
+	BitStream(int reserved); // in uint32_t units
+	BitStream(int size, uint32_t *buffer); //for reading
 
 
 	~BitStream();
-	void init(int size, uint64_t *buffer); //in uint64_t units for reading
+	void init(int size, uint32_t *buffer); //in uint32_t units for reading
 	void reserve(int size); //for writing
 
 
-	void write(uint64_t bits, int n);
-	void writeUint(uint64_t bits, int n);
-	void read(int n, uint64_t &bits);
-	uint64_t readUint(int numbits); //faster
-	uint64_t writtenBits();
+	void write(uint32_t bits, int n);
+	void writeUint(uint32_t bits, int n);
+	void read(int n, uint32_t &bits);
+	uint32_t readUint(int numbits); //faster
+	uint32_t writtenBits();
 
 
 	void flush();
-	int size; //in uint64
-	uint64_t *buffer;
+	int size; //in uint32
+	uint32_t *buffer;
 private:
-	void push_back(uint64_t w);
+	void push_back(uint32_t w);
 	int allocated;
 
-	uint64_t *pos;
-	uint64_t buff;
+	uint32_t *pos;
+	uint32_t buff;
 	int bits;
 };
 
