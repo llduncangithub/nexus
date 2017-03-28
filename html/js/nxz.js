@@ -16,212 +16,116 @@ GNU General Public License (http://www.gnu.org/licenses/gpl.txt)
 for more details.
 */
 
-BitStream = function(array) {
+//TODO rename format in tyep
+
+var Format
+
+function Attribute(name, q, components, format, strategy) {
 	var t = this;
-	t.a = array;
-	t.current = array[0];
-	t.position = 0; //position in the buffer
-	t.pending = 0;  //bits still to read
-	t.mask = new Uint32Buffer([0x00, 0x01, 0x03, 0x07, 0x0f, 0x01f, 0x03f, 0x07f, 0xff, 
-		0x01ff, 0x03ff, 0x07ff, 0x0fff, 0x01fff, 0x03fff, 0x07fff, 0xffff, 0x01ffff,
-		0x03ffff, 0x07ffff, 0x0fffff, 0x01fffff, 0x03fffff, 0x07fffff, 0xffffff, 0x01ffffff,
-		0x03ffffff,  0x07ffffff,  0x0fffffff, 0x01fffffff, 0x03fffffff, 0x7fffffff]);
-};
- 
-BitStream.prototype = { 
-	read: function(bits) {
-		var t = this;
-		var result = 0;
-		if(bits > pending) {
-			result |= (t.current << (bits - pending))>>>0;
-			bits -= pending;
-			t.current = t.a[++t.position];
-			pending = 32;
-		}
-		pending -= bits;
-		result |= (t.a[position] >> pending)>>>0;
-		t.current = (t.current & t.mask[pending])>>>0;
-	}
-};
+	t.name = name;
+	t.q = q; //float
+	t.components = components; //integer
+	t.format = format;
+	t.strategy = strategy;
+}
 
-Stream = function(buffer) {
+Attribute.prototype = {
+init: function(nvert, nface) {
 	var t = this;
-	t.data = buffer;
-	t.buffer = new Uint8Array(buffer);
-	t.pos = 0;
-	t.view = new DataView(buffer);
+	var n = nvert*t.components;
+	t.values = new Int32Array(n);  //local workspace 
+
+	//init output buffers
+	switch(t.format) {
+	case 0:
+	case 1: t.values = t.buffer = new Int32Array(n); break; //no point replicating.
+	case 2:
+	case 3: t.buffer = new Int16Array(n); break;
+	case 4: t.buffer = new Int8Array(n); break;
+	case 5: t.buffer = new Uint8Array(n); break;
+	case 6:
+	case 7: t.buffer = new Float32Array(n); break;
+	default: throw "Error if reading";
+	}
+},
+
+decode: function(stream) {
+	if(strategy & 0x2) //correlated
+		stream.encodeArray(t.values, components);
+	else
+		stream.decodeValues(t.values, components);
+},
+
+deltaDecode: function(nvert, context) {
+	var values = t.values;
+	var N = t.N;
+	var n = context.length/3;
+	if(strategy & 0x1) { //parallel
+		for(var i = 1; i < n; i++)
+			for(var c = 0; c < N; c++)
+				values[i*N + c] = values[context[i*3]*N + c] + values[context[i*3+1]*N + c] - values[context[i*3+2]*N + c];
+	} else if(context) {
+		for(var i = 1; i < n; i++)
+			for(var c = 0; c < N; c++)
+				values[i*N + c] += values[context[i*3]*N + c];
+	} else {
+		for(var i = N; i < nvert*N; i++)
+				values[i] += values[i - N];
+	}
+},
+
+postDelta: function() {},
+
+dequantize: function(nvert) {
+	var t= this;
+	var n = t.n*nvert;
+	switch(t.format) {
+	case 0:
+	case 1: break;
+	case 2:
+	case 3: 
+	case 4: 
+	case 5: 
+		for(var i = 0; i < n; i++)
+			buffer[i] = coords[i];
+		break;
+	case 6:
+	case 7: 
+		for(var i = 0; i < n; i++)
+			buffer[i] = coords[i]*q;
+		break;
+	}
 }
 
-Stream.prototype = {
-	readChar: function() {
-		var c = this.buffer[this.pos++];
-		if(c > 127) c -= 256;
-		return c;
-	},
-	readUChar: function() {
-		return this.buffer[this.pos++];
-	},	
-	readShort: function() {
-		this.pos += 2;
-		return this.view.getInt16(this.pos-2, true);
-	},
-	readFloat: function() {
-		this.pos += 4;
-		return this.view.getFloat32(this.pos-4, true);
-	},
-	//TODO whouldn't be 
-	readInt: function() {
-		this.pos += 4;
-		return this.view.getInt32(this.pos-4, true);
-	},
-	readArray: function(n) {
-		var a = this.buffer.subarray(this.pos, this.pos+n);
-		this.pos += n;
-		return a;
-	},
-	readString: function() {
-		var n = this.readShort();
-		var s = String.fromCharCode.apply(null, this.readArray(n-1));
-		this.pos++; //null terminator of string.
-		return s;
-	},
-	readBitStream:function() {
-		var n = this.readInt();
-		var pad = this.pos & 0x3;
-		if(pad != 0)
-			this.pos += 4 - pad;
-		var b = new BitStream(new Uint32Array(this.data, this.pos, n));
-		this.pos += n*8;
-		return b;
-	}
 };
 
-function Tunstall(wordsize, lookup_size) {
-	this.wordsize = wordsize? wordsize : 8;
-	this.lookup_size = lookup_size? lookup_size : 8;
+function IndexAttr(nvert, nface, format) {
+	var t = this;
+	if(!format || format == 0) //uint32 by default
+		t.faces = new Uint32Buffer(nface);
+	else if(format == 2)
+		t.faces = new Uint16Buffer(nface);
+	else
+		throw "Unsupported format";
 }
 
-Tunstall.prototype = {
-	decompress: function(stream) {
-		var nsymbols = stream.readUChar();
-		this.probabilities = stream.readArray(nsymbols*2);
-		this.createDecodingTables();
-		var size = stream.readInt();
-		var data = new Uint8Array(size);
-		var compressed_size = stream.readInt();
-		var compressed_data = stream.readArray(compressed_size);
-		if(size)
-			this._decompress(compressed_data, compressed_size, data, size);
-		return data;
-	}, 
+IndexAttr.prototype = {
+decode: function(stream) {
+	var t = this;
 
-	createDecodingTables: function() {
-		//read symbol,prob,symbol,prob as uchar.
-		//Here probabilities will range from 0 to 0xffff for better precision
+	var n = stream.readInt();
+	t.groups = new Array(n);
+	for(var i = 0; i < n; i++)
+		t.groups[i] = stream.readInt();
+		var stunstall = new Tunstall;
 
-		var n_symbols = this.probabilities.length/2;
-		if(n_symbols <= 1) return;
-
-		var queues = []; //array of arrays
-		var buffer = []; 
-
-		//initialize adding all symbols to queues
-		for(var i = 0; i < n_symbols; i++) {
-			var symbol = this.probabilities[i*2];
-			var s = [(this.probabilities[i*2+1])<<8, buffer.length, 1]; //probability, position in the buffer, length
-			queues[i] = [s];
-			buffer.push(this.probabilities[i*2]); //symbol
-		}
-		var dictionary_size = 1<<this.wordsize;
-		var n_words = n_symbols;
-		var table_length = n_symbols;
-
-		//at each step we grow all queues using the most probable sequence
-		while(n_words < dictionary_size - n_symbols +1) {
-			//Should use a stack or something to be faster, but we have few symbols
-			//find highest probability word
-			var best = 0;
-			var max_prob = 0;
-			for(var i = 0; i < n_symbols; i++) {
-				var p = queues[i][0][0]; //front of queue probability.
-				if(p > max_prob) {
-					best = i;
-					max_prob = p;
-				}
-			}
-			var symbol = queues[best][0];
-			var pos = buffer.length;
-			
-			for(var i = 0; i < n_symbols; i++) {
-				var sym = this.probabilities[i*2];
-				var prob = this.probabilities[i*2+1]<<8;
-				var s = [((prob*symbol[0])>>>16), pos, symbol[2]+1]; //combine probabilities, keep track of buffer, keep length of queue
-
-				for(var k  = 0; k < symbol[2]; k++)
-					buffer[pos+k] = buffer[symbol[1] + k]; //copy sequence of symbols
-
-				pos += symbol[2];
-				buffer[pos++] = sym; //append symbol
-				queues[i].push(s);
-			}
-			table_length += (n_symbols-1)*(symbol[2] + 1) +1; 
-			n_words += n_symbols -1;
-			queues[best].shift(); //remove first thing
-		}
-
-		this.index = new Uint32Array(n_words);
-		this.lengths = new Uint32Array(n_words);
-		this.table = new Uint8Array(table_length);
-		var word = 0;
-		var pos = 0;
-		for(i = 0; i < queues.length; i++) {
-			var queue = queues[i];
-			for(var k = 0; k < queue.length; k++) {
-				var s = queue[k];
-				this.index[word] = pos;
-				this.lengths[word] = s[2]; //length
-				word++;
-
-				for(var j = 0; j < s[2]; j++)
-					this.table[pos + j] = buffer[s[1] + j]; //buffer of offset
-				pos += s[2]; //length
-			}
-		}
-	},
-	_decompress: function(input, input_size, output, output_size) {
-		var input_pos = 0;
-		var output_pos = 0;
-		if(this.probabilities.length == 2) {
-			var symbol = this.probabilities[0];
-			for(var i = 0; i < output_size; i++)
-				output[i] = symbol;
-			return;
-		}
-
-		while(input_pos < input_size-1) {
-			var symbol = input[input_pos++];
-			var start = this.index[symbol];
-			var end = start + this.lengths[symbol];
-			for(var i = start; i < end; i++) 
-				output[output_pos++] = this.table[i];
-		}
-
-		//last symbol might override so we check.
-		var symbol = input[input_pos];
-		var start = this.index[symbol];
-		var end = start + output_size - output_pos;
-		var length = output_size - output_pos;
-		for(var i = start; i < end; i++)
-			output[output_pos++] = this.table[i];
-
-		return output;
-	}
+	var tunstall = new Tunstall;
+	t.clers = tunstall.decompress(stream);
+	t.bitstream = this.stream.readBitStream();
 }
+};
 
 
-//node is an object with nvert, nface
-//patches is an array of offsets in the index, triangle are grouped by those offsets
-//signature tells wether mesh has indices, normals, colors, etc. {'colors': true, 'normals':true, 'indices': true }
 
 function NxzDecoder(data) {
 	var t = this;
@@ -238,10 +142,11 @@ function NxzDecoder(data) {
 	for(let i = 0; i < n; i++) {
 		var a = {};
 		var name = stream.readString();
-		a.q = stream.readFloat();
-		a.components = stream.readUChar(); //internal number of components
-		a.strategy = stream.readUChar();
-		t.geometry[name] = a;
+		var q = stream.readFloat();
+		var components = stream.readUChar(); //internal number of components
+		var format = stream.readUChar();     //default format (same as it was in input), can be overridden
+		var strategy = stream.readUChar();
+		t.geometry[name] = new Attribute(name, q, components, format, strategy);
 	}
 
 //TODO move this vars into an array.
@@ -256,18 +161,11 @@ NxzDecoder.prototype = {
 decode: function() {
 	var t = this;
 
-	t.last = new UInt32Array(t.nvert*3); //for parallelogram prediction
+	t.last = new Uint32Array(t.nvert*3); //for parallelogram prediction
 	t.last_count = 0;
 
-	for(let i in t.attributes) {
-		var a = t.attributes[i];
-		if(i == "position")      new Float32Array(t.nvert*3); break;
-		else if(i == "normal")   new Float32Array(t.nvert*3); break;
-		else if(i == "color")    new Uint8Array(t.nvert*4);   break;
-		else if(i == "uv")       new Float32Array(t.nvert*2); break;
-		else {
-		}
-	}
+	for(let i in t.attributes)
+		t.attributes[i].init(t.nvert, t.nface);
 
 	if(t.nface == 0)
 		t.decodePointCloud();
@@ -277,54 +175,24 @@ decode: function() {
 	return geometry;
 },
 
-decodeCoordinates: function() {
+decodePointCloud: function() {
 	var t = this;
-	t.min = [t.stack[3], t.stack[4], t.stack[5]];
-
-	var step = Math.pow(2.0, t.coord_q);
-
-	var hi_bits = Math.max(t.coord_bits - 32, 0);
-	var lo_bits = Math.min(t.coord_bits, 32);
-
-    var bitstream = t.stream.readBitStream();
-
-	var tunstall = new Tunstall;
-	var diffs = tunstall.decompress(t.stream);	
-
-	var hi = bitstream.read(hi_bits);
-	var lo = bitstream.read(lo_bits);
-	var p = new ZPoint(hi, lo);
-	var count = 0;
-	p.toPoint(t.min, step, t.coords, count);
-	count += 3;
-    for(var i = 1; i < t.node.nvert; i++) {
-		var d = diffs[i-1];
-		p.setBit(d, 1);
-		if(d > 32) {
-			p.hi = (p.hi & ~((1<<(d-32))-1))>>>0;
-			var e = bitstream.read(d - 32);
-			p.hi = (p.hi | e)>>>0;
-			p.lo = bitstream.read(32);
-		} else {
-
-			if(d == 32) {
-				p.lo = bitstream.read(d);
-			} else {
-				var e = bitstream.read(d);
-				p.lo = (p.lo & ~((1<<d) -1))>>>0;
-				p.lo = (p.lo | e)>>>0;
-			}
-		}
-		p.toPoint(t.min, step, t.coords, count);
-		count += 3;
+	for(var i in t.attributes) {
+		var a = t.attributes[i];
+		a.decode(t.nvert, t.stream);
+		a.deltaDecode(t.nvert);
+		a.dequantize(t.nvert);
 	}
 },
 
-decodeFaces: function() {
-	if(!this.node.nface) return;
-	
-	this.vertex_count = 0;
+decodeMesh: function() {
+	var t = this;
+	t.index = new IndexAttr(t.nvert, t.nface, 0); //USE
+	t.index.decode(stream);
+
+	t.vertex_count = 0;
 	var start = 0;
+	var cler = 0;
 	for(var p = 0; p < this.patches.length; p++) {
 		var end = this.patches[p];
 		this.decodeConnectivity(end - start, start*3);

@@ -181,6 +181,7 @@ void NxzEncoder::encode() {
 		stream.writeString(it.first.c_str());                //name
 		stream.write<float>(it.second->q);
 		stream.write<uchar>(it.second->N);
+		stream.write<uchar>(it.second->format);
 		stream.write<uchar>(it.second->strategy);
 	}
 

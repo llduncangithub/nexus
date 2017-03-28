@@ -52,6 +52,7 @@ NxzDecoder::NxzDecoder(int len, uchar *input): vertex_count(0) {
 		std::string name =  stream.readString();
 		float q = stream.read<float>();
 		uint32_t components = stream.read<uchar>();
+		uint32_t format = stream.read<uchar>();
 		uint32_t strategy = stream.read<uchar>();
 
 		Attribute23 *attr = nullptr;
@@ -61,7 +62,7 @@ NxzDecoder::NxzDecoder(int len, uchar *input): vertex_count(0) {
 			attr = new NormalAttr();
 		else if(name == "color")
 			attr = new ColorAttr();
-		else if(name == " uv")
+		else if(name == "uv")
 			attr = new GenericAttr<int>(components);
 
 		attr->q = q;

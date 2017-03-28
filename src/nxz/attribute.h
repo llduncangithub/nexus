@@ -53,7 +53,6 @@ public:
 	Format format;    //input or output format
 	uint32_t size;    //compressed size (for stats and other nefarious purpouses)
 
-
 	Attribute23(): buffer(nullptr), N(0), q(0.0f), strategy(0), format(INT32), size(0) {}
 	virtual ~Attribute23(){}
 
