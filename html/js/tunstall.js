@@ -22,7 +22,7 @@ BitStream = function(array) {
 	t.current = array[0];
 	t.position = 0; //position in the buffer
 	t.pending = 0;  //bits still to read
-	t.mask = new Uint32Buffer([0x00, 0x01, 0x03, 0x07, 0x0f, 0x01f, 0x03f, 0x07f, 0xff, 
+	t.mask = new Uint32Array([0x00, 0x01, 0x03, 0x07, 0x0f, 0x01f, 0x03f, 0x07f, 0xff, 
 		0x01ff, 0x03ff, 0x07ff, 0x0fff, 0x01fff, 0x03fff, 0x07fff, 0xffff, 0x01ffff,
 		0x03ffff, 0x07ffff, 0x0fffff, 0x01fffff, 0x03fffff, 0x07fffff, 0xffffff, 0x01ffffff,
 		0x03ffffff,  0x07ffffff,  0x0fffffff, 0x01fffffff, 0x03fffffff, 0x7fffffff]);
@@ -95,6 +95,7 @@ Stream.prototype = {
 	},
 	//make decodearray2,3 later //TODO faster to create values here or passing them?
 	decodeArray: function(N, values) {
+		var t = this;
 		var bitstream = t.readBitStream();
 
 		var tunstall = new Tunstall;
@@ -127,6 +128,7 @@ Stream.prototype = {
 		return logs.size();
 	},
 	decodeValues: function(N, values) {
+		var t = this;
 		var bitstream = t.readBitStream();
 		var tunstall = new Tunstall;
 

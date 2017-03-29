@@ -49,11 +49,12 @@ init: function(nvert, nface) {
 	}
 },
 
-decode: function(stream) {
-	if(strategy & 0x2) //correlated
-		stream.encodeArray(t.values, components);
+decode: function(nvert, stream) {
+	var t = this;
+	if(t.strategy & 0x2) //correlated
+		stream.encodeArray(t.values, t.components);
 	else
-		stream.decodeValues(t.values, components);
+		stream.decodeValues(t.values, t.components);
 },
 
 deltaDecode: function(nvert, context) {
@@ -99,10 +100,83 @@ dequantize: function(nvert) {
 
 };
 
+function ColorAttr(name, q, components, format, strategy) {
+	Attribute.call(this, name, q, components, format, strategy);
+	this.qc = [];
+}
+
+ColorAttr.prototype = Object.create(Attribute.prototype);
+ColorAttr.prototype.decode = function(nvert, stream) {
+	for(var c = 0; c < 4; c++)
+		t.qc[c] = stream.readUChar();
+	Attribute.prototype.decode.call(this, nvert, stream);
+}
+
+ColorAttr.prototype.dequantize = function(nvert) {
+	var t = this;
+	for(var i = 0; i < nvert; i++) {
+		var offset = i*4;
+
+		var e0 = t.values[offset + 0] * t.qc[0];
+		var e1 = t.values[offset + 1] * t.qc[1];
+		var e2 = t.values[offset + 2] * t.qc[2];
+
+		t.buffer[offset + 0] = (e2 + e0)&0xff;
+		t.buffer[offset + 1] = e0;
+		t.buffer[offset + 2] = (e1 + e0)&0xff;
+		t.buffer[offset + 3] = t.values[offset + 3] * t.qc[3];
+	}
+}
+
+function NormalAttr(name, q, components, format, strategy) {
+	Attribute.call(this, name, q, components, format, strategy);
+}
+
+NormalAttr.prototype = Object.create(Attribute.prototype);
+NormalAttr.prototype.init = function(nvert, nface) {
+	var t = this;
+	var n = nvert*t.components;
+	t.values = new Int32Array(2);  //local workspace 
+
+	//init output buffers
+	switch(t.format) {
+	case 3: t.buffer = new Int16Array(n); break;
+	case 6:
+	case 7: t.buffer = new Float32Array(n); break;
+	default: throw "Error if reading";
+	}
+},
+
+NormalAttr.prototype.toSphere = function(o, values, buffer, unit) {
+	var av0 = v[o] > 0? v[o]:-v[o];
+	var av1 = v[o+1] > 0? v[o+1]:-v[o+1];
+	buffer[o] = values[o];
+	buffer[o+1] = values[o+1];
+	buffer[o+2] = unit - av0 - av1;
+	if (buffer[o+2] < 0) {
+		buffer[o] = ((v[o] > 0)? 1 : -1)*(unit - av1);
+		buffer[o+1] = ((v[o+1] > 0)? 1 : -1)*(unit - av1[0]);
+	}
+	var len = 1/Math.sqrt(buffer[o]*buffer[o] + buffer[o+1]*buffer[o+1] + buffer[o+2]*buffer[o+2]);
+	if(t.format == 3) {
+		len *= 32767;
+	}
+	buffer[o] *= len;
+	buffer[o+1] *= len;
+	buffer[o+2] *= len;
+}
+
+NormalAttr.prototype.decode = function(nvert, stream) {
+	var t = this;
+	t.prediction = stream.readUChar();
+
+	stream.decodeArray(t.values, 2);
+}
+
 function IndexAttr(nvert, nface, format) {
 	var t = this;
 	if(!format || format == 0) //uint32 by default
-		t.faces = new Uint32Buffer(nface);
+		t.faces = new Uint32Array(nface);
 	else if(format == 2)
 		t.faces = new Uint16Buffer(nface);
 	else
@@ -121,7 +195,7 @@ decode: function(stream) {
 
 	var tunstall = new Tunstall;
 	t.clers = tunstall.decompress(stream);
-	t.bitstream = this.stream.readBitStream();
+	t.bitstream = stream.readBitStream();
 }
 };
 
@@ -139,6 +213,7 @@ function NxzDecoder(data) {
 	var n = stream.readInt();
 
 	t.geometry = {};
+	t.attributes = {};
 	for(let i = 0; i < n; i++) {
 		var a = {};
 		var name = stream.readString();
@@ -146,7 +221,12 @@ function NxzDecoder(data) {
 		var components = stream.readUChar(); //internal number of components
 		var format = stream.readUChar();     //default format (same as it was in input), can be overridden
 		var strategy = stream.readUChar();
-		t.geometry[name] = new Attribute(name, q, components, format, strategy);
+		var attr = Attribute;
+		switch(name) {
+		case "color":  attr = ColorAttr; break;
+		case "normal": attr = NormalAttr; break;
+		}
+		t.attributes[name] = new attr(name, q, components, format, strategy);
 	}
 
 //TODO move this vars into an array.
@@ -172,7 +252,7 @@ decode: function() {
 	else
 		t.decodeMesh();
 
-	return geometry;
+	return t.geometry;
 },
 
 decodePointCloud: function() {
@@ -182,13 +262,14 @@ decodePointCloud: function() {
 		a.decode(t.nvert, t.stream);
 		a.deltaDecode(t.nvert);
 		a.dequantize(t.nvert);
+		t.geometry[a.name] = a.buffer;
 	}
 },
 
 decodeMesh: function() {
 	var t = this;
 	t.index = new IndexAttr(t.nvert, t.nface, 0); //USE
-	t.index.decode(stream);
+	t.index.decode(t.stream);
 
 	t.vertex_count = 0;
 	var start = 0;

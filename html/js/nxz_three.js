@@ -34,7 +34,7 @@ THREE.NXZLoader.prototype = {
         };  */
 
         const geometry = new THREE.BufferGeometry();
-        if (nface) {
+        if (geometry.nface) {
           geometry.setIndex(new(mesh.position.length/3 > 65535 ?
                 THREE.Uint32BufferAttribute : THREE.Uint16BufferAttribute)
               (mesh.index, 1));

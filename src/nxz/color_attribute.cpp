@@ -17,7 +17,7 @@ void ColorAttr::quantize(uint32_t nvert, char *buffer) {
 			Color4b &y = *(Color4b *)&(values[i*N]);
 			for(int k = 0; k < 4; k++)
 				y[k] = c[k]/qc[k];
-			//y = y.toYCC();
+			y = y.toYCC();
 		}
 	}
 		break;
@@ -29,7 +29,7 @@ void ColorAttr::quantize(uint32_t nvert, char *buffer) {
 			Color4b &y = *(Color4b *)&(values[i*N]);
 			for(int k = 0; k < 4; k++)
 				y[k] = ((int)(colors[i*N + k]*255.0f))/qc[k];
-			//y = y.toYCC();
+			y = y.toYCC();
 		}
 	}
 		break;
@@ -45,7 +45,7 @@ void ColorAttr::dequantize(uint32_t nvert) {
 		Color4b *colors = (Color4b *)buffer;
 		for(uint32_t i = 0; i < nvert; i++) {
 			Color4b &c = colors[i];
-			//c = c.toRGB();
+			c = c.toRGB();
 			for(int k = 0; k < 4; k++)
 				c[k] *= qc[k];
 		}
@@ -57,7 +57,7 @@ void ColorAttr::dequantize(uint32_t nvert) {
 		memcpy(&*colors.begin(), buffer, nvert*sizeof(Color4b));
 		for(uint32_t i = 0; i < nvert; i++) {
 			Color4b &c = colors[i];
-			//c = c.toRGB();
+			c = c.toRGB();
 			for(int k = 0; k < 4; k++)
 				((float *)buffer)[i*4 +k] = (c[k]*qc[k])/255.0f;
 		}
