@@ -21,7 +21,7 @@ BitStream = function(array) {
 	t.a = array;
 	t.current = array[0];
 	t.position = 0; //position in the buffer
-	t.pending = 0;  //bits still to read
+	t.pending = 32;  //bits still to read
 	t.mask = new Uint32Array([0x00, 0x01, 0x03, 0x07, 0x0f, 0x01f, 0x03f, 0x07f, 0xff, 
 		0x01ff, 0x03ff, 0x07ff, 0x0fff, 0x01fff, 0x03fff, 0x07fff, 0xffff, 0x01ffff,
 		0x03ffff, 0x07ffff, 0x0fffff, 0x01fffff, 0x03fffff, 0x07fffff, 0xffffff, 0x01ffffff,
@@ -32,15 +32,16 @@ BitStream.prototype = {
 	read: function(bits) {
 		var t = this;
 		var result = 0;
-		if(bits > pending) {
-			result |= (t.current << (bits - pending))>>>0;
-			bits -= pending;
+		if(bits > t.pending) {
+			result |= (t.current << (bits - t.pending))>>>0;
+			bits -= t.pending;
 			t.current = t.a[++t.position];
-			pending = 32;
+			t.pending = 32;
 		}
-		pending -= bits;
-		result |= (t.a[position] >> pending)>>>0;
-		t.current = (t.current & t.mask[pending])>>>0;
+		t.pending -= bits;
+		result |= (t.current >>> t.pending);
+		t.current = (t.current & t.mask[t.pending])>>>0;
+		return result;
 	}
 };
 
@@ -90,7 +91,7 @@ Stream.prototype = {
 		if(pad != 0)
 			this.pos += 4 - pad;
 		var b = new BitStream(new Uint32Array(this.data, this.pos, n));
-		this.pos += n*8;
+		this.pos += n*4;
 		return b;
 	},
 	//make decodearray2,3 later //TODO faster to create values here or passing them?
@@ -99,7 +100,7 @@ Stream.prototype = {
 		var bitstream = t.readBitStream();
 
 		var tunstall = new Tunstall;
-		var logs = tunstall.decompress(stream);
+		var logs = tunstall.decompress(this);
 
 		for(var i =0; i < logs.length; i++) {
 			var diff = logs[i];
@@ -111,29 +112,19 @@ Stream.prototype = {
 			//making a single read is 2/3 faster
 			//uint64_t &max = bmax[diff];
 			var max = ((1<<diff)>>1)>>>0;
-			if(diff < 22) {
-				//uint64_t &mask = bmask[diff]; //using table is 4% faster
-				var mask = ((1<<diff)-1)>>>0;
-				var bits = bitstream.read(N*diff);
-				for(var c = N-1; c > 0; c--) {
-					values[i*N + c] = ((bits & mask)>>>0) - max;
-					bits >>= diff;
-				}
-				values[i*N] = bits - max;
-			} else {
-				for(var c = 0; c < N; c++)
-					p[c] = bitstream.readUint(diff) - max;
-			}
+			for(var c = 0; c < N; c++)
+				values[i*N + c] = bitstream.read(diff) - max;
 		}
-		return logs.size();
+		return logs.length;
 	},
+
 	decodeValues: function(N, values) {
 		var t = this;
 		var bitstream = t.readBitStream();
 		var tunstall = new Tunstall;
 
 		for(var c = 0; c < N; c++) {
-			var logs = tunstall.decompress(stream);
+			var logs = tunstall.decompress(this);
 
 			for(var i = 0; i < logs.length; i++) {
 				var diff = logs[i];
@@ -166,8 +157,10 @@ Tunstall.prototype = {
 		this.probabilities = stream.readArray(nsymbols*2);
 		this.createDecodingTables();
 		var size = stream.readInt();
+		if(size > 100000000) throw("TOO LARGE!");
 		var data = new Uint8Array(size);
 		var compressed_size = stream.readInt();
+		if(size > 100000000) throw("TOO LARGE!");
 		var compressed_data = stream.readArray(compressed_size);
 		if(size)
 			this._decompress(compressed_data, compressed_size, data, size);

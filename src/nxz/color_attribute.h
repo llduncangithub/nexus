@@ -24,14 +24,17 @@ public:
 	virtual void dequantize(uint32_t nvert);
 
 	virtual void encode(uint32_t nvert, Stream &stream) {
+		stream.restart();
 		for(int c = 0; c < 4; c++)
 			stream.write<uchar>(qc[c]);
-		GenericAttr<uchar>::encode(nvert, stream);
+
+		stream.encodeValues<char>(nvert, (char *)&*diffs.begin(), N);
+		size = stream.elapsed();
 	}
-	virtual void decode(uint32_t nvert, Stream &stream) {
+	virtual void decode(uint32_t /*nvert*/, Stream &stream) {
 		for(int c = 0; c < 4; c++)
 			qc[c] = stream.read<uchar>();
-		GenericAttr<uchar>::decode(nvert, stream);
+		stream.decodeValues<uchar>((uchar *)buffer, N);
 	}
 };
 

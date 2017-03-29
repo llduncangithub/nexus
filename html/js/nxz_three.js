@@ -33,20 +33,17 @@ THREE.NXZLoader.prototype = {
             color:    new Float32Array(nvert)
         };  */
 
-        const geometry = new THREE.BufferGeometry();
-        if (geometry.nface) {
-          geometry.setIndex(new(mesh.position.length/3 > 65535 ?
-                THREE.Uint32BufferAttribute : THREE.Uint16BufferAttribute)
-              (mesh.index, 1));
-        }
-        geometry.addAttribute('position', new THREE.Float32BufferAttribute(mesh.position, 3));
+        var geometry = new THREE.BufferGeometry();
+        if (mesh.nface) 
+          geometry.setIndex(new THREE.BufferAttribute(mesh.index, 3));
+
+		geometry.addAttribute('position', new THREE.BufferAttribute(mesh.position, 3));
 		if(mesh.color)
-	        geometry.addAttribute('color', new THREE.Float32BufferAttribute(mesh.color, 3));
+			geometry.addAttribute('color', new THREE.BufferAttribute(mesh.color, 3, true));
         if (mesh.normal)
-          geometry.addAttribute('normal', new THREE.Float32BufferAttribute(mesh.normals, 3));
-        
+          geometry.addAttribute('normal', new THREE.BufferAttribute(mesh.normal, 3, true));
         if (mesh.uv)
-            geometry.addAttribute('uv', new THREE.Float32BufferAttribute(mesh.uvs, 2));
+            geometry.addAttribute('uv', new THREE.BufferAttribute(mesh.uv, 2));
 		return geometry;
     }
 };

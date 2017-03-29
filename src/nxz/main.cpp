@@ -61,7 +61,7 @@ int main(int argc, char *argv[]) {
 	//TODO checks for: strategy cannot be parallel in point clouds (ALL attributes)
 	//                 normals strategy must be DIFF
 
-#define POINTCLOUD
+//#define POINTCLOUD
 #ifdef POINTCLOUD
 	nx::NxzEncoder encoder(nvert, 0, nx::Stream::TUNSTALL);
 	encoder.addPositions((float *)&*coords.begin());
@@ -69,7 +69,7 @@ int main(int argc, char *argv[]) {
 	nx::NxzEncoder encoder(nvert, nface, nx::Stream::TUNSTALL);
 	encoder.addPositions((float *)&*coords.begin(), &*index.begin());
 #endif
-	encoder.addNormals((float *)&*normals.begin(), 10, nx::NormalAttr::BORDER);
+//	encoder.addNormals((float *)&*normals.begin(), 10, nx::NormalAttr::BORDER);
 	encoder.addColors((unsigned char *)&*colors.begin());
 	encoder.encode();
 
@@ -113,7 +113,7 @@ int main(int argc, char *argv[]) {
 	QTime time;
 	time.start();
 
-	int iter = 10;
+	int iter = 1;
 	for(int i = 0; i < iter; i++) {
 		nx::NxzDecoder decoder(encoder.stream.size(), encoder.stream.data());
 		decoder.setPositions((float *)&*recoords.begin());

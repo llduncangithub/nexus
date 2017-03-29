@@ -5,9 +5,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
 <style>body { margin: 0px; overflow: hidden; }</style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/84/three.js"></script>
+<script src="js/three.js"></script>
 <script src="js/TrackballControls.js"></script>
 <script src="js/tunstall.js"></script>
+<script src="js/attribute.js"></script>
 <script src="js/nxz.js"></script>
 <script src="js/nxz_three.js"></script>
 </head>
@@ -17,6 +18,9 @@
 </body>
 
 <script>
+//var camera = new THREE.PerspectiveCamera( 30, window.innerWidth / window.innerHeight, 0.1, 100 );
+//camera.position.z = 4;
+
 var camera = new THREE.PerspectiveCamera( 30, window.innerWidth / window.innerHeight, 0.1, 100 );
 camera.position.z = 4;
 
@@ -54,17 +58,23 @@ container.appendChild( renderer.domElement );
 
 
 
-var loader = new THREE.NXZLoader();
+var loader = new THREE.NXZLoader();//This will add a starfield to the background of a scene
+
 loader.load( 'models/bunny.nxz', function(geometry) {
-	var material = new THREE.MeshStandardMaterial( { color: 0x0055ff, shading: THREE.FlatShading } );
-	var mesh = new THREE.Mesh( geometry, material );
-/*	mesh.position.y = - 0.2;
-	mesh.position.z =   0.3;
-	mesh.rotation.x = - Math.PI / 2;
-	mesh.scale.multiplyScalar( 0.001 );
-	mesh.castShadow = true;
-	mesh.receiveShadow = true; */
-	scene.add( mesh );
+
+	geometry.computeBoundingBox();
+
+	if(geometry.index) {
+		var material = new THREE.MeshStandardMaterial( { color: 0x0055ff, shading: THREE.FlatShading } );
+		var mesh = new THREE.Mesh( geometry, material );
+	} else {
+		var material = new THREE.PointsMaterial( { size: 2, sizeAttenuation: false, vertexColors: THREE.VertexColors } );
+		var mesh = new THREE.Points(geometry, material);
+	}
+	geometry.center();
+	mesh.scale.divideScalar(geometry.boundingBox.getSize().length());
+	scene.add( mesh ); 
+	render();
 } );
 
 

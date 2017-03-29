@@ -197,6 +197,7 @@ public:
 			logs.resize(size);
 			for(uint32_t i = 0; i < size; i++) {
 				int val = values[i*N + c];
+
 				if(val == 0) {
 					logs[i] = 0;
 					continue;
@@ -237,6 +238,9 @@ public:
 				values[i*N + c] = val;
 			}
 		}
+//		if(N == 4)
+//		for(int i = 0; i < 100; i++)
+//			cout << "V: " << (int)values[i] << endl;
 		return logs.size();
 	}
 
@@ -282,7 +286,7 @@ public:
 			//making a single read is 2/3 faster
 			//uint64_t &max = bmax[diff];
 			const uint64_t max = (1<<diff)>>1;
-			if(diff < 22) {
+			if(0 && diff < 22) {
 				//uint64_t &mask = bmask[diff]; //using table is 4% faster
 				const uint64_t mask = (1<<diff)-1;
 				uint64_t bits = bitstream.readUint(N*diff);

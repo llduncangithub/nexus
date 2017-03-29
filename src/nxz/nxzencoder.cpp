@@ -229,7 +229,7 @@ void NxzEncoder::encodePointCloud() {
 
 	header_size = stream.elapsed();
 
-        stream.write<uint32_t>(nvert);
+	stream.write<uint32_t>(nvert);
 	stream.write<uint32_t>(0); //nface
 
 
@@ -624,4 +624,5 @@ void NxzEncoder::encodeFaces(int start, int end) {
 		visited[opposite_face] = true;
 		totfaces--;
 	}
+	index.max_front = front.size();
 }

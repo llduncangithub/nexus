@@ -146,6 +146,9 @@ void NxzDecoder::decodeMesh() {
 		decodeFaces(start*3, end*3, cler);
 		start = end;
 	}
+	for(int i = 0; i < nface; i++)
+		cout << index.faces32[i] << endl;
+
 #ifdef PRESERVED_UNREFERENCED
 	//decode unreferenced vertices
 	while(vertex_count < nvert) {
@@ -174,7 +177,7 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler) {
 
 	//edges of the mesh to be processed
 	vector<DEdge2> front;
-	front.reserve((end - start)*3);
+	front.reserve(index.max_front);
 
 	//faceorder is used to minimize split occourrence positioning in front and in back the new edges to be processed.
 	vector<int>faceorder;

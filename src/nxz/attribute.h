@@ -16,10 +16,12 @@ public:
 	std::vector<uint32_t> groups;
 	std::vector<uchar> clers;
 	BitStream bitstream;
+	uint32_t max_front; //max size reached by front.
 	uint32_t size;
 
-	IndexAttr(): faces32(nullptr), faces16(nullptr) {}
+	IndexAttr(): faces32(nullptr), faces16(nullptr), max_front(0) {}
 	void encode(Stream &stream) {
+		stream.write<uint32_t>(max_front);
 		stream.write<uint32_t>(groups.size());
 		for(uint32_t &g: groups)
 			stream.write<uint32_t>(g);
@@ -31,6 +33,7 @@ public:
 	}
 
 	void decode(Stream &stream) {
+		max_front = stream.read<uint32_t>();
 		groups.resize(stream.read<uint32_t>());
 		for(uint32_t &g: groups)
 			g = stream.read<uint32_t>();
@@ -168,8 +171,11 @@ public:
 					values[i*N + c] += values[f.a*N + c];
 			}
 		} else { //point clouds assuming values are already sorted by proximity.
-			for(uint32_t i = N; i < nvert*N; i++)
+			for(uint32_t i = N; i < nvert*N; i++) {
 				values[i] += values[i - N];
+				if(i < 100 && N == 4)
+					cout << "Values: " << (int)values[i] << endl;
+			}
 		}
 	}
 
