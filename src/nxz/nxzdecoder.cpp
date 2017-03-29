@@ -146,8 +146,6 @@ void NxzDecoder::decodeMesh() {
 		decodeFaces(start*3, end*3, cler);
 		start = end;
 	}
-	for(int i = 0; i < nface; i++)
-		cout << index.faces32[i] << endl;
 
 #ifdef PRESERVED_UNREFERENCED
 	//decode unreferenced vertices
