@@ -385,12 +385,13 @@ decodeFaces: function(start, end) {
 	var front = t.index.front;
 	var front_count = 0; //count each integer so it's front_back*5
 	function addFront(_v0, _v1, _v2, _prev, _next) {
-		front[front_count++] = _v0;
-		front[front_count++] = _v1;
-		front[front_count++] = _v2;
-		front[front_count++] = _prev;
-		front[front_count++] = _next;
-		front[front_count++] = 0; //deleted
+		front[front_count] = _v0;
+		front[front_count+1] = _v1;
+		front[front_count+2] = _v2;
+		front[front_count+3] = _prev;
+		front[front_count+4] = _next;
+		front[front_count+5] = 0; //deleted
+		front_count += 6;
 	}
 	function _next(t) {
 		t++;
@@ -404,7 +405,7 @@ decodeFaces: function(start, end) {
 	}
 
 
-	var faceorder = new Uint32Array((end - start)/3);
+	var faceorder = new Uint32Array((end - start));
 	var order_front = 0;
 	var order_back = 0;
 
@@ -417,9 +418,10 @@ decodeFaces: function(start, end) {
 	var prediction = t.index.prediction;
 
 	while(start < end) {
+
 		if(new_edge == -1 && order_front >= order_back && !delayed.length) {
 
-			var last_index = -1;
+			var last_index = t.vertex_count-1;
 			var vindex = [];
 
 			var split = 0;
@@ -442,21 +444,22 @@ decodeFaces: function(start, end) {
 
 			var current_edge = front_count;
 			faceorder[order_back++] = front_count;
-			addFront(vindex[1], vindex[2], vindex[0], current_edge + 2, current_edge + 1);
+			addFront(vindex[1], vindex[2], vindex[0], (current_edge + 2)*6, (current_edge + 1)*6);
 			faceorder[order_back++] = front_count;
-			addFront(vindex[2], vindex[0], vindex[1], current_edge + 0, current_edge + 2);
+			addFront(vindex[2], vindex[0], vindex[1], (current_edge + 0)*6, (current_edge + 2)*6);
 			faceorder[order_back++] = front_count;
-			addFront(vindex[0], vindex[1], vindex[2], current_edge + 1, current_edge + 0);
+			addFront(vindex[0], vindex[1], vindex[2], (current_edge + 1)*6, (current_edge + 0)*6);
 			continue;
 		}
 		var f;
 		if(new_edge != -1) {
 			f = new_edge;
-			edge = -1;
-		} else if(faceorder.length) 
+			new_edge = -1;
+		} else if(order_front < order_back) {
 			f = faceorder[order_front++];
-		else 
+		} else {
 			f = delayed.pop();
+		}
 		
 		var edge_start = f;
 
@@ -487,25 +490,21 @@ decodeFaces: function(start, end) {
 			front[prev + 4] = new_edge;
 			front[next + 3] = new_edge + 6;
 
-			front[front_count++] = v0;
-			front[front_count++] = opposite;
-			front[front_count++] = v1;
-			front[front_count++] = prev;
-			front[front_count++] = new_edge+6;
-			front_count++; 
-//			addFront(v0, opposite, v1, prev, new_edge + 6);
+			front[front_count] = v0;
+			front[front_count+1] = opposite;
+			front[front_count+2] = v1;
+			front[front_count+3] = prev;
+			front[front_count+4] = new_edge+6;
+			front_count += 6; 
 
-			faceorder[order_back] = front_count;
+			faceorder[order_back++] = front_count;
 
-			front[front_count++] = opposite;
-			front[front_count++] = v1;
-			front[front_count++] = v0;
-			front[front_count++] = new_edge; 
-			front[front_count++] = next;
-			front_count++; 
-//			addFront(opposite, v1, v0, new_edge, next);
-
-
+			front[front_count] = opposite;
+			front[front_count+1] = v1;
+			front[front_count+2] = v0;
+			front[front_count+3] = new_edge; 
+			front[front_count+4] = next;
+			front_count += 6; 
 
 		} else if(c == 1) { //LEFT
 			front[prev + 5] = 1; //deleted
@@ -513,13 +512,12 @@ decodeFaces: function(start, end) {
 			front[next + 3] = new_edge;
 			opposite = front[prev + 0];
 
-			front[front_count++] = opposite;
-			front[front_count++] = v1;
-			front[front_count++] = v0;
-			front[front_count++] = front[prev +3];
-			front[front_count++] = next;
-			front_count++; 
-//			addFront(opposite, v1, v0, front[prev + 3], next);
+			front[front_count] = opposite;
+			front[front_count+1] = v1;
+			front[front_count+2] = v0;
+			front[front_count+3] = front[prev +3];
+			front[front_count+4] = next;
+			front_count += 6; 
 
 		} else if(c == 2) { //RIGHT
 			front[next + 5] = 1;
@@ -527,16 +525,15 @@ decodeFaces: function(start, end) {
 			front[prev + 4] = new_edge;
 			opposite = front[next + 1];
 
-			front[front_count++] = v0;
-			front[front_count++] = opposite;
-			front[front_count++] = v1;
-			front[front_count++] = prev;
-			front[front_count++] = front[next+4];
-			front_count++; 
-//			addFront(v0, opposite, v1, prev, front[next + 4]);
+			front[front_count] = v0;
+			front[front_count+1] = opposite;
+			front[front_count+2] = v1;
+			front[front_count+3] = prev;
+			front[front_count+4] = front[next+4];
+			front_count += 6; 
 
 		} else if(c == 5) { //DELAY
-			front[edge_start + 5] = 0;
+			front[edge_start + 5] = 1;
 			delayed.push(edge_start);
 			new_edge = -1;
 			continue;
@@ -548,12 +545,16 @@ decodeFaces: function(start, end) {
 			front[front[next + 4] + 3] = front[prev + 3];
 			opposite = front[prev + 0];
 			new_edge = -1;
+
 		} else {
 			throw "INVALID CLER!";
 		}
-		t.index.faces[start++] = v1;
-		t.index.faces[start++] = v0;
-		t.index.faces[start++] = opposite;
+		if(v1 >= t.nvert || v0 >= t.nvert || opposite >= t.nvert)
+			throw "Topological error";
+		t.index.faces[start] = v1;
+		t.index.faces[start+1] = v0;
+		t.index.faces[start+2] = opposite;
+		start += 3;
 	}
 }
 

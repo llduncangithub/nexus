@@ -21,8 +21,12 @@ THREE.NXZLoader.prototype = {
 
     decodeNxz: function(buffer) {
 
-        var decoder = new NxzDecoder(buffer);
-        var mesh = decoder.decode();
+		var now = performance.now();
+		for(var i = 0; i < 10; i++) {
+	        var decoder = new NxzDecoder(buffer);
+	        var mesh = decoder.decode();	
+		}
+		console.log("MT/s:", (10*mesh.nface/1000000)/((performance.now() - now)/1000));
 
 //Mesh is an an array made like this.
 /*        mesh = {
@@ -35,7 +39,7 @@ THREE.NXZLoader.prototype = {
 
         var geometry = new THREE.BufferGeometry();
         if (mesh.nface) 
-          geometry.setIndex(new THREE.BufferAttribute(mesh.index, 3));
+          geometry.setIndex(new THREE.BufferAttribute(mesh.index, 1));
 
 		geometry.addAttribute('position', new THREE.BufferAttribute(mesh.position, 3));
 		if(mesh.color)

@@ -173,8 +173,6 @@ public:
 		} else { //point clouds assuming values are already sorted by proximity.
 			for(uint32_t i = N; i < nvert*N; i++) {
 				values[i] += values[i - N];
-				if(i < 100 && N == 4)
-					cout << "Values: " << (int)values[i] << endl;
 			}
 		}
 	}

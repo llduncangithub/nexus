@@ -69,7 +69,7 @@ int main(int argc, char *argv[]) {
 	nx::NxzEncoder encoder(nvert, nface, nx::Stream::TUNSTALL);
 	encoder.addPositions((float *)&*coords.begin(), &*index.begin());
 #endif
-//	encoder.addNormals((float *)&*normals.begin(), 10, nx::NormalAttr::BORDER);
+	encoder.addNormals((float *)&*normals.begin(), 10, nx::NormalAttr::DIFF);
 	encoder.addColors((unsigned char *)&*colors.begin());
 	encoder.encode();
 

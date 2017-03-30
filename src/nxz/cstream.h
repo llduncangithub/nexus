@@ -238,9 +238,6 @@ public:
 				values[i*N + c] = val;
 			}
 		}
-//		if(N == 4)
-//		for(int i = 0; i < 100; i++)
-//			cout << "V: " << (int)values[i] << endl;
 		return logs.size();
 	}
 

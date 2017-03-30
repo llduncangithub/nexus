@@ -117,6 +117,7 @@ bool NxzEncoder::addNormals(float *buffer, int bits, NormalAttr::Prediction no) 
 	NormalAttr *normal = new NormalAttr(bits);
 	normal->format = Attribute23::FLOAT;
 	normal->prediction = no;
+//	normal->strategy = 0; //Attribute23::CORRELATED;
 	bool ok = addAttribute("normal", (char *)buffer, normal);
 	if(!ok) delete normal;
 	return ok;

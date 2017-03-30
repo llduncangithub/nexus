@@ -119,8 +119,6 @@ void NormalAttr::deltaEncode(std::vector<Quad> &context) {
 			for(int c = 0; c < 2; c++) {
 				int &d = diffs[i*2 + c];
 				d = values[quad.t*2 + c] - values[quad.a*2 + c];
-				if(d < -q)     d += 2*q;
-				else if(d > q) d -= 2*q;
 			}
 		}
 		diffs.resize(context.size()*2); //unreferenced vertices
@@ -166,8 +164,6 @@ void NormalAttr::deltaDecode(uint32_t nvert, std::vector<Face> &context) {
 			for(int c = 0; c < 2; c++) {
 				int &d = diffs[i*2 + c];
 				d += diffs[f.a*2 + c];
-				if(d < -q)     d += 2*q;
-				else if(d > q) d -= 2*q;
 			}
 
 		}
@@ -175,8 +171,6 @@ void NormalAttr::deltaDecode(uint32_t nvert, std::vector<Face> &context) {
 		for(uint32_t i = 2; i < nvert*2; i++) {
 			int &d = diffs[i];
 			d += diffs[i-2];
-			if(d < -q)     d += 2*q;
-			else if(d > q) d -= 2*q;
 		}
 	}
 }
@@ -257,11 +251,6 @@ void NormalAttr::computeNormals(Point3s *normals, std::vector<Point3f> &estimate
 
 void NormalAttr::computeNormals(Point3f *normals, std::vector<Point3f> &estimated) {
 	uint32_t nvert = estimated.size();
-
-	/*	Point3f tn(0.7, 0.7, 0);
-	Point2i tq = toOcta(tn, (int)q);
-	tn = toSphere(tq, (int)q);
-	cout << "TQ: " <<	tq[0] << " " << tq[1] << " 2: " << tn[0] << " " << tn[1] << " " << tn[2] << endl;*/
 
 	Point2i *diffp = (Point2i *)&*diffs.begin();
 	int count = 0; //here for the border.
