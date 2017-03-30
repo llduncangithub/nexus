@@ -22,11 +22,12 @@ THREE.NXZLoader.prototype = {
     decodeNxz: function(buffer) {
 
 		var now = performance.now();
-		for(var i = 0; i < 10; i++) {
+		var iter = 100;
+		for(var i = 0; i < iter; i++) {
 	        var decoder = new NxzDecoder(buffer);
 	        var mesh = decoder.decode();	
 		}
-		console.log("MT/s:", (10*mesh.nface/1000000)/((performance.now() - now)/1000));
+		console.log(Math.floor(performance.now() - now), "MT/s:", (iter*mesh.nface/1000)/((performance.now() - now)/1));
 
 //Mesh is an an array made like this.
 /*        mesh = {

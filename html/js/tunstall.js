@@ -26,6 +26,7 @@ BitStream = function(array) {
 		0x01ff, 0x03ff, 0x07ff, 0x0fff, 0x01fff, 0x03fff, 0x07fff, 0xffff, 0x01ffff,
 		0x03ffff, 0x07ffff, 0x0fffff, 0x01fffff, 0x03fffff, 0x07fffff, 0xffffff, 0x01ffffff,
 		0x03ffffff,  0x07ffffff,  0x0fffffff, 0x01fffffff, 0x03fffffff, 0x7fffffff]);
+
 };
  
 BitStream.prototype = { 
@@ -51,6 +52,9 @@ Stream = function(buffer) {
 	t.buffer = new Uint8Array(buffer);
 	t.pos = 0;
 	t.view = new DataView(buffer);
+	t.max = new Uint32Array(32);
+	for(var i = 0; i < 32; i++)
+		t.max[i] = (1<<i)>>>1;
 }
 
 Stream.prototype = {
@@ -109,9 +113,8 @@ Stream.prototype = {
 					values[i*N + c] = 0;
 				continue;
 			}
-			//making a single read is 2/3 faster
-			//uint64_t &max = bmax[diff];
-			var max = ((1<<diff)>>1)>>>0;
+//			var max = t.max[diff];
+			var max = (1<<diff)>>>1;
 			for(var c = 0; c < N; c++)
 				values[i*N + c] = bitstream.read(diff) - max;
 		}
@@ -151,11 +154,19 @@ function Tunstall(wordsize, lookup_size) {
 	this.lookup_size = lookup_size? lookup_size : 8;
 }
 
+/*function Tunstall() {
+}
+
+Tunstall.prototype.wordsize = 8;
+Tunstall.prototype.lookup_size = 8; */
+
+
+
 Tunstall.prototype = {
 	decompress: function(stream) {
 		var nsymbols = stream.readUChar();
-		this.probabilities = stream.readArray(nsymbols*2);
-		this.createDecodingTables();
+		this.probs = stream.readArray(nsymbols*2);
+		this.createDecodingTables2();
 		var size = stream.readInt();
 		if(size > 100000000) throw("TOO LARGE!");
 		var data = new Uint8Array(size);
@@ -169,9 +180,9 @@ Tunstall.prototype = {
 
 	createDecodingTables: function() {
 		//read symbol,prob,symbol,prob as uchar.
-		//Here probabilities will range from 0 to 0xffff for better precision
+		//Here probs will range from 0 to 0xffff for better precision
 
-		var n_symbols = this.probabilities.length/2;
+		var n_symbols = this.probs.length/2;
 		if(n_symbols <= 1) return;
 
 		var queues = []; //array of arrays
@@ -179,10 +190,10 @@ Tunstall.prototype = {
 
 		//initialize adding all symbols to queues
 		for(var i = 0; i < n_symbols; i++) {
-			var symbol = this.probabilities[i*2];
-			var s = [(this.probabilities[i*2+1])<<8, buffer.length, 1]; //probability, position in the buffer, length
+			var symbol = this.probs[i*2];
+			var s = [(this.probs[i*2+1])<<8, buffer.length, 1]; //probability, position in the buffer, length
 			queues[i] = [s];
-			buffer.push(this.probabilities[i*2]); //symbol
+			buffer.push(this.probs[i*2]); //symbol
 		}
 		var dictionary_size = 1<<this.wordsize;
 		var n_words = n_symbols;
@@ -205,9 +216,9 @@ Tunstall.prototype = {
 			var pos = buffer.length;
 			
 			for(var i = 0; i < n_symbols; i++) {
-				var sym = this.probabilities[i*2];
-				var prob = this.probabilities[i*2+1]<<8;
-				var s = [((prob*symbol[0])>>>16), pos, symbol[2]+1]; //combine probabilities, keep track of buffer, keep length of queue
+				var sym = this.probs[i*2];
+				var prob = this.probs[i*2+1]<<8;
+				var s = [((prob*symbol[0])>>>16), pos, symbol[2]+1]; //combine probs, keep track of buffer, keep length of queue
 
 				for(var k  = 0; k < symbol[2]; k++)
 					buffer[pos+k] = buffer[symbol[1] + k]; //copy sequence of symbols
@@ -240,12 +251,104 @@ Tunstall.prototype = {
 			}
 		}
 	},
+	createDecodingTables2: function() {
+		//Here probs will range from 0 to 0xffff for better precision
+
+		var t = this;
+		var n_symbols = t.probs.length/2;
+		if(n_symbols <= 1) return;
+
+		var dictionary_size = 1<<this.wordsize;
+		//(max length is word dictionary? nope the removed ones dont count, 1 per step so add max 255 potentially deleted)
+		var queues = new Uint32Array(dictionary_size + 255); //array of n symbols array of prob, position in buffer, length
+		var starts = new Uint32Array(255); //starts of each queue
+		var end = 0; //keep track of queue end
+		var buffer = new Uint8Array( ((dictionary_size+2)*dictionary_size)); //worst case for 2 symbols. 1 with 254 prob and other qwith 1 prob
+		var pos = 0; //keep track of buffer first free space
+
+
+/*      QUEUE as column 
+
+		A  x  AA
+		C  C  CA
+		G  G  GA
+		T  T  TA
+*/
+
+		//initialize adding all symbols to queues
+		for(var i = 0; i < n_symbols; i++) {
+			var symbol = t.probs[i*2];
+			var prob = t.probs[i+1];
+			starts[i] = i*3;
+			queues[i*3] = prob<<8;
+			queues[i*3+1] = pos;
+			queues[i*3+2] = 1;
+			buffer[pos++] = symbol;
+		}
+		end = n_symbols*3;
+
+		var n_words = n_symbols;
+		var table_length = n_symbols;
+
+		//at each step we grow all queues using the most probable sequence
+		while(n_words < dictionary_size - n_symbols +1) {
+			//find highest probability word
+			var best = 0;
+			var max_prob = 0;
+			for(var i = 0; i < n_symbols; i++) {
+				var p = queues[starts[i]]; //front of queue probability.
+				if(p > max_prob) {
+					best = i;
+					max_prob = p;
+				}
+			}
+			var start = starts[best];
+			for(var i = 0; i < n_symbols; i++) {
+				var sym = t.probs[i*2];
+				var prob = this.probs[i*2+1]<<8;
+				var len = queues[start+2];
+				queues[end] = ((prob*queues[start])>>>16);
+				queues[end+1] = pos;
+				queues[end+2] = len + 1;
+				end += 3;
+
+				for(var k  = 0; k < len; k++)
+					buffer[pos + k] = buffer[queues[start+1] + k]; //copy sequence of symbols
+
+				pos += len;
+				buffer[pos++] = sym; //append symbol
+			}
+			starts[best] += n_symbols*3; //move one column
+
+			table_length += (n_symbols-1)*(symbol[2] + 1) +1; 
+			n_words += n_symbols -1;
+		}
+
+		t.index = new Uint32Array(n_words);
+		t.lengths = new Uint32Array(n_words);
+		t.table = new Uint8Array(table_length);
+		var word = 0;
+		var count = 0;
+		var len;
+		for(i = 0, row = 0; i < end; i += 3, row++) {
+			if(row >= n_symbols)
+				row  = 0;
+			if(starts[row] > i) continue; //skip deleted words
+
+			t.index[word] = count;
+			t.lengths[word] = len = queues[i+2];
+			word++;
+			for(var j = 0; j < len; j++)
+				t.table[count+j] = buffer[queues[i+1] + j];
+			count += len;
+		}
+	},
 	_decompress: function(input, input_size, output, output_size) {
 		//TODO optimize using buffer arrays
 		var input_pos = 0;
 		var output_pos = 0;
-		if(this.probabilities.length == 2) {
-			var symbol = this.probabilities[0];
+		if(this.probs.length == 2) {
+			var symbol = this.probs[0];
 			for(var i = 0; i < output_size; i++)
 				output[i] = symbol;
 			return;

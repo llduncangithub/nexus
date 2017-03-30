@@ -292,7 +292,7 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler) {
 			front.emplace_back(v0, opposite, v1, e.prev, next_edge.next);
 
 		} else if(c == DELAY) {
-			e.deleted = false;
+			//e.deleted = false;
 			delayed.push_back(f);
 			new_edge = -1;
 			continue;

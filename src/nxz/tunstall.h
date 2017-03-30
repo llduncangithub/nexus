@@ -52,6 +52,7 @@ public:
 
 	//create accelerated structures (need probabilities);
 	void createDecodingTables();
+	void createDecodingTables2();
 	void createEncodingTables();
 
 	//data 1 symbol 1 char, if using binary input convert them, the output is in bits though.

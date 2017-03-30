@@ -117,6 +117,88 @@ void Tunstall::setProbabilities(float *probs, int n_symbols) {
 	}
 }
 
+void Tunstall::createDecodingTables2() {
+	int n_symbols = probabilities.size();
+	if(n_symbols <= 1) return;
+
+	int dictionary_size = 1<<wordsize;
+	std::vector<TSymbol> queues(dictionary_size +  255); ///TODO fix aaarrgghhh
+	size_t end = 0;
+	vector<unsigned char> &buffer = table;
+	buffer.resize((dictionary_size+2)*dictionary_size);
+	int pos = 0; //keep track of buffer lenght/
+	vector<int> starts(n_symbols);
+
+	//initialize adding all symbols to queues
+	for(int i = 0; i < n_symbols; i++) {
+		TSymbol s;
+		s.probability = (uint32_t)(probabilities[i].probability<<8);
+		s.offset = pos;
+		s.length = 1;
+
+		starts[i] = i;
+		queues[end++] = s;
+		buffer[pos++] = probabilities[i].symbol;
+	}
+
+	int n_words = n_symbols;
+	int table_length = n_symbols;
+	while(n_words < dictionary_size - n_symbols +1) {
+		//find highest probability word
+		int best = 0;
+		float max_prob = 0;
+		for(int i = 0; i < n_symbols; i++) {
+			float p = queues[starts[i]].probability ;
+			if(p > max_prob) {
+				best = i;
+				max_prob = p;
+			}
+		}
+
+		TSymbol &symbol = queues[starts[best]];
+
+		for(int i = 0; i < n_symbols; i++) {
+			uint32_t p = probabilities[i].probability;
+			TSymbol s;
+			//TODO check performances with +1 and without.
+			s.probability = ( ( symbol.probability * (unsigned int)(p<<8) )>>16); //probabilities[i].probability*symbol.probability;
+			s.offset = pos;
+			s.length = symbol.length + 1;
+			assert(pos + symbol.length < buffer.size());
+			memcpy(&buffer[pos], &buffer[symbol.offset], symbol.length);
+			pos += symbol.length;
+			buffer[pos++] = probabilities[i].symbol;
+			queues[end++] = s;
+		}
+		starts[best] += n_symbols;
+		table_length += (n_symbols-1)*(symbol.length + 1) +1;
+		n_words += n_symbols -1;
+	}
+	//cout << "Table length: " << table_length << " Buffer: " << pos << endl;
+	index.clear();
+	lengths.clear();
+	//table.clear();
+
+	//build table and index
+	index.resize(n_words);
+	lengths.resize(n_words);
+	//table.resize(table_length);
+	int word = 0;
+	pos = 0;
+	for(size_t i = 0, row = 0; i < end; i++, row++) {
+		if(row >= n_symbols)
+			row = 0;
+		if(starts[row] > i)
+			continue;
+
+		TSymbol &s = queues[i];
+		index[word] = s.offset;
+		lengths[word] = s.length;
+		word++;
+		//memcpy(&table[pos], &buffer[s.offset], s.length);
+		//pos += s.length;
+	}
+}
 
 void Tunstall::createDecodingTables() {
 	int n_symbols = probabilities.size();

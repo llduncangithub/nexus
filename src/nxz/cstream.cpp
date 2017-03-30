@@ -48,7 +48,7 @@ int Stream::tunstall_compress(uchar *data, int size) {
 	Tunstall t;
 	t.getProbabilities(data, size);
 
-	t.createDecodingTables();
+	t.createDecodingTables2();
 	t.createEncodingTables();
 
 	int compressed_size;
@@ -73,7 +73,7 @@ void Stream::tunstall_decompress(vector<uchar> &data) {
 	t.probabilities.resize(nsymbols);
 	memcpy(&*t.probabilities.begin(), probs, nsymbols*2);
 
-	t.createDecodingTables();
+	t.createDecodingTables2();
 
 	int size = read<int>();
 	data.resize(size);

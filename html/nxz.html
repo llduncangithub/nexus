@@ -55,9 +55,9 @@ renderer.setSize( window.innerWidth, window.innerHeight);
 var container = document.getElementById( 'container');
 container.appendChild( renderer.domElement );
 
+var profile = false;
 
-
-
+/*
 var loader = new THREE.NXZLoader();//This will add a starfield to the background of a scene
 
 loader.load( 'models/bunny.nxz', function(geometry) {
@@ -74,16 +74,18 @@ loader.load( 'models/bunny.nxz', function(geometry) {
 	geometry.center();
 	mesh.scale.divideScalar(geometry.boundingBox.getSize().length());
 	scene.add( mesh ); 
-	//render();
+	if(!profile)
+		render();
 } );
-
+*/
 
 window.addEventListener( 'resize', onWindowResize, false );
-//render();
+render();
 
 
 function onWindowResize() {
-
+	if(profile)
+		return;
 	camera.aspect = window.innerWidth / window.innerHeight;
 	camera.updateProjectionMatrix();
 
@@ -91,16 +93,22 @@ function onWindowResize() {
 
 	controls.handleResize();
 	controls.update();
-	//render();
+	render();
 }
 
 function animate() {
-	//requestAnimationFrame( animate );
-	//controls.update();
+	if(profile)
+		return;
+
+	requestAnimationFrame( animate );
+	controls.update();
 }
 
 function render() {
-	//renderer.render( scene, camera );
+	if(profile)
+		return;
+
+	renderer.render( scene, camera );
 }
 
 animate();

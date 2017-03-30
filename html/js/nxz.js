@@ -47,8 +47,6 @@ function NxzDecoder(data) {
 //TODO move this vars into an array.
 	t.geometry.nvert = t.nvert = t.stream.readInt();
 	t.geometry.nface = t.nface = t.stream.readInt();
-
-	console.log(t.nvert, t.nface);
 }
 
 NxzDecoder.prototype = {
@@ -380,30 +378,17 @@ decodeFaces: function(start, end) {
 	var clers = t.index.clers;
 	var bitstream = t.index.bitstream;
 
-	var current_face = 0;          //keep track of connected component start
-	//t.vertex_count = 0;
 	var front = t.index.front;
 	var front_count = 0; //count each integer so it's front_back*5
+
 	function addFront(_v0, _v1, _v2, _prev, _next) {
 		front[front_count] = _v0;
 		front[front_count+1] = _v1;
 		front[front_count+2] = _v2;
 		front[front_count+3] = _prev;
 		front[front_count+4] = _next;
-		front[front_count+5] = 0; //deleted
-		front_count += 6;
+		front_count += 5;
 	}
-	function _next(t) {
-		t++;
-		if(t == 3) t = 0;
-		return t;
-	}
-	function _prev(t) {
-		t--;
-		if(t == -1) t = 2;
-		return t;
-	}
-
 
 	var faceorder = new Uint32Array((end - start));
 	var order_front = 0;
@@ -444,35 +429,35 @@ decodeFaces: function(start, end) {
 
 			var current_edge = front_count;
 			faceorder[order_back++] = front_count;
-			addFront(vindex[1], vindex[2], vindex[0], (current_edge + 2)*6, (current_edge + 1)*6);
+			addFront(vindex[1], vindex[2], vindex[0], (current_edge + 2)*5, (current_edge + 1)*5);
 			faceorder[order_back++] = front_count;
-			addFront(vindex[2], vindex[0], vindex[1], (current_edge + 0)*6, (current_edge + 2)*6);
+			addFront(vindex[2], vindex[0], vindex[1], (current_edge + 0)*5, (current_edge + 2)*5);
 			faceorder[order_back++] = front_count;
-			addFront(vindex[0], vindex[1], vindex[2], (current_edge + 1)*6, (current_edge + 0)*6);
+			addFront(vindex[0], vindex[1], vindex[2], (current_edge + 1)*5, (current_edge + 0)*5);
 			continue;
 		}
-		var f;
+		var edge;
 		if(new_edge != -1) {
-			f = new_edge;
+			edge = new_edge;
 			new_edge = -1;
 		} else if(order_front < order_back) {
-			f = faceorder[order_front++];
+			edge = faceorder[order_front++];
 		} else {
-			f = delayed.pop();
+			edge = delayed.pop();
 		}
-		
-		var edge_start = f;
+		if(typeof(edge) == "undefined")
+			throw "aarrhhj";
 
-		if(front[edge_start + 5]) continue; //deleted
+		if(front[edge] < 0) continue; //deleted
 
 		var c = clers[t.cler++];
 		if(c == 4) continue; //BOUNDARY
 
-		var v0   = front[edge_start + 0];
-		var v1   = front[edge_start + 1];
-		var v2   = front[edge_start + 2];
-		var prev = front[edge_start + 3];
-		var next = front[edge_start + 4];
+		var v0   = front[edge + 0];
+		var v1   = front[edge + 1];
+		var v2   = front[edge + 2];
+		var prev = front[edge + 3];
+		var next = front[edge + 4];
 
 		new_edge = front_count; //points to new edge to be inserted
 		var opposite = -1;
@@ -488,62 +473,66 @@ decodeFaces: function(start, end) {
 			}
 
 			front[prev + 4] = new_edge;
-			front[next + 3] = new_edge + 6;
+			front[next + 3] = new_edge + 5;
 
 			front[front_count] = v0;
-			front[front_count+1] = opposite;
-			front[front_count+2] = v1;
-			front[front_count+3] = prev;
-			front[front_count+4] = new_edge+6;
-			front_count += 6; 
+			front[front_count + 1] = opposite;
+			front[front_count + 2] = v1;
+			front[front_count + 3] = prev;
+			front[front_count + 4] = new_edge+5;
+			front_count += 5; 
 
 			faceorder[order_back++] = front_count;
 
 			front[front_count] = opposite;
-			front[front_count+1] = v1;
-			front[front_count+2] = v0;
-			front[front_count+3] = new_edge; 
-			front[front_count+4] = next;
-			front_count += 6; 
+			front[front_count + 1] = v1;
+			front[front_count + 2] = v0;
+			front[front_count + 3] = new_edge; 
+			front[front_count + 4] = next;
+			front_count += 5; 
 
 		} else if(c == 1) { //LEFT
-			front[prev + 5] = 1; //deleted
+
 			front[front[prev + 3] + 4] = new_edge;
 			front[next + 3] = new_edge;
-			opposite = front[prev + 0];
+			opposite = front[prev];
 
 			front[front_count] = opposite;
-			front[front_count+1] = v1;
-			front[front_count+2] = v0;
-			front[front_count+3] = front[prev +3];
-			front[front_count+4] = next;
-			front_count += 6; 
+			front[front_count + 1] = v1;
+			front[front_count + 2] = v0;
+			front[front_count + 3] = front[prev + 3];
+			front[front_count + 4] = next;
+			front_count += 5; 
+
+			front[prev] = -1; //deleted
 
 		} else if(c == 2) { //RIGHT
-			front[next + 5] = 1;
 			front[front[next + 4] + 3] = new_edge;
 			front[prev + 4] = new_edge;
 			opposite = front[next + 1];
 
 			front[front_count] = v0;
-			front[front_count+1] = opposite;
-			front[front_count+2] = v1;
-			front[front_count+3] = prev;
-			front[front_count+4] = front[next+4];
-			front_count += 6; 
+			front[front_count + 1] = opposite;
+			front[front_count + 2] = v1;
+			front[front_count + 3] = prev;
+			front[front_count + 4] = front[next+4];
+			front_count += 5; 
+
+			front[next] = -1;
 
 		} else if(c == 5) { //DELAY
-			front[edge_start + 5] = 1;
-			delayed.push(edge_start);
+			delayed.push(edge);
 			new_edge = -1;
+
 			continue;
 
 		} else if(c == 3) { //END
-			front[prev + 5] = 1;
-			front[next + 5] = 1;
 			front[front[prev + 3] + 4] = front[next + 4];
 			front[front[next + 4] + 3] = front[prev + 3];
-			opposite = front[prev + 0];
+			opposite = front[prev];
+
+			front[prev] = -1;
+			front[next] = -1;
 			new_edge = -1;
 
 		} else {

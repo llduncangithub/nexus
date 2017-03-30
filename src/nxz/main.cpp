@@ -11,6 +11,8 @@
 #include <QTime>
 #include <QFile>
 
+#include "cstream.h"
+
 class NxVertex; class NxEdge; class NxFace;
 struct NxUsedTypes : public vcg::UsedTypes<vcg::Use<NxVertex>   ::AsVertexType,
 											  vcg::Use<NxEdge>     ::AsEdgeType,
@@ -28,6 +30,27 @@ int main(int argc, char *argv[]) {
 		cerr << "Usage: " << argv[0] << " [file.ply]\n";
 		return 0;
 	}
+
+	nx::Stream stream;
+	vector<uchar> a = {0, 1, 0, 1, 0, 2, 0, 0, 3, 0};
+	stream.compress(a.size(), &*a.begin());
+
+	stream.rewind();
+	vector<uchar> b;
+	stream.decompress(b);
+
+	for(int i = 0; i < a.size(); i++) {
+		cout << (int)a[i] << " ";
+	}
+	cout << endl;
+
+	for(int i = 0; i < b.size(); i++) {
+		cout << (int)b[i] << " ";
+	}
+	cout << endl;
+
+//	exit(0);
+
 	NxMesh mesh;
 	if(tri::io::ImporterPLY<NxMesh>::Open(mesh, argv[1]) != 0) {
 		printf("Error reading file  %s\n",argv[1]);
@@ -113,7 +136,7 @@ int main(int argc, char *argv[]) {
 	QTime time;
 	time.start();
 
-	int iter = 1;
+	int iter = 100;
 	for(int i = 0; i < iter; i++) {
 		nx::NxzDecoder decoder(encoder.stream.size(), encoder.stream.data());
 		decoder.setPositions((float *)&*recoords.begin());
