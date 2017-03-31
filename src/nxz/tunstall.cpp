@@ -30,6 +30,8 @@ struct TSymbol {
 	int offset;
 	int length;
 	uint32_t probability;
+	TSymbol() {}
+	TSymbol(uint32_t p, int o, int l): probability(p), offset(o), length(l) {}
 };
 
 /* Left as an example of how to compress to a stream
@@ -116,74 +118,106 @@ void Tunstall::setProbabilities(float *probs, int n_symbols) {
 		probabilities.push_back(Symbol(i, probs[i]*255));
 	}
 }
-void Tunstall::createRLETables() {
-	int dictionary_size = 1<<wordsize;
-	int n_symbols = probabilities.size();
-	int len = dictionary_size - n_symbols;
-	table.resize(dictionary_size, 0);
-	index.resize(dictionary_size);
-	lengths.resize(dictionary_size);
-	for(int i = 0; i <= len; i++) {
-		index[i] = 0;
-		lengths[i] = i+1;
-	}
-	for(int i = 1; i < n_symbols; i++) {
-		index[len + i] = len + i;
-		lengths[len + i] = 1;
-		table[len + i] = i;
-	}
-}
 
 void Tunstall::createDecodingTables2() {
 	int n_symbols = probabilities.size();
 	if(n_symbols <= 1) return;
 
-	if(probabilities[0].probability > rle_limit) { //sort of length encoding.
-		createRLETables();
-		return;
-	}
-
 	int dictionary_size = 1<<wordsize;
 	std::vector<TSymbol> queues(2*dictionary_size);
 	size_t end = 0;
 	vector<unsigned char> &buffer = table;
-	buffer.resize(dictionary_size*dictionary_size);
+	assert(wordsize == 8);
+	buffer.resize(8192);
+	//buffer.resize(65536);
 	int pos = 0; //keep track of buffer lenght/
 	vector<int> starts(n_symbols);
 
-	//initialize adding all symbols to queues
-	for(int i = 0; i < n_symbols; i++) {
-		TSymbol s;
-		s.probability = (uint32_t)(probabilities[i].probability<<8);
-		s.offset = pos;
-		s.length = 1;
+	int n_words = 0;
+	int table_length = 0;
 
-		starts[i] = i;
-		queues[end++] = s;
-		buffer[pos++] = probabilities[i].symbol;
+	int count = 2;
+	uint32_t p0 = probabilities[0].probability<<8;
+	uint32_t p1 = probabilities[1].probability<<8;
+	uint32_t prob = (p0*p0)>>16;
+	int max_count = (dictionary_size - 1)/(n_symbols - 1);
+	while(prob > p1 && count < max_count) {
+		prob = (prob*p0) >> 16;
+		count++;
 	}
 
-	int n_words = n_symbols;
-	int table_length = n_symbols;
+	if(count >= 16) { //Very low entropy results in large tables > 8K.
+		//  AAAA...A count times.    //only 1 word
+		//  AAAA...B and we need all shorter to b so count
+		//  AAAA...Z
+		//nwords = (n_symbols-1)*count + 1 <= dictionary_size;
+		//count <= (dictionary_size -1)/(n_symbols -1);
+		//test 255/1 -> count = 255   A...A + 255 AAAAAB
+		//test 255/2 -> count = 127   A...A + 127*A..B + 127*A...C = 255.
+
+		buffer[pos++] = probabilities[0].symbol;
+		for(int k = 1; k < n_symbols; k++) {
+			for(int i = 0; i < count-1; i++)
+				buffer[pos++] = probabilities[0].symbol;
+			buffer[pos++] = probabilities[k].symbol;
+		}
+		starts[0] = (count-1)*n_symbols;
+		for(int k = 1; k < n_symbols; k++)
+			starts[k] = k;
+
+		prob = 0xffff;
+		for(int col = 0; col < count; col++) {
+			for(int row = 1; row < n_symbols; row++) {
+				TSymbol &s = queues[row + col*n_symbols];
+				s.probability = (prob * (probabilities[row].probability<<8)) >> 16;
+				s.offset = row*count - col;
+				s.length = col+1;
+			}
+			prob = ((prob*p0) >> 16);
+		}
+		TSymbol &first = queues[(count-1)*n_symbols];
+		first.probability = prob;
+		first.offset = 0;
+		first.length = count;
+		n_words = 1 + count*(n_symbols - 1);
+		table_length = n_words;
+		end = count*n_symbols;
+		assert(n_words == pos);
+
+	} else {
+		n_words = n_symbols;
+		table_length = n_symbols;
+		//initialize adding all symbols to queues
+		for(int i = 0; i < n_symbols; i++) {
+			TSymbol s;
+			s.probability = (uint32_t)(probabilities[i].probability<<8);
+			s.offset = pos;
+			s.length = 1;
+
+			starts[i] = i;
+			queues[end++] = s;
+			buffer[pos++] = probabilities[i].symbol;
+		}
+	}
+
+
 	while(n_words < dictionary_size - n_symbols +1) {
 		//find highest probability word
 		int best = 0;
-		float max_prob = 0;
+		uint32_t max_prob = 0;
 		for(int i = 0; i < n_symbols; i++) {
-			float p = queues[starts[i]].probability ;
+			uint32_t p = queues[starts[i]].probability ;
 			if(p > max_prob) {
 				best = i;
 				max_prob = p;
 			}
 		}
-
 		TSymbol &symbol = queues[starts[best]];
 
 		for(int i = 0; i < n_symbols; i++) {
 			uint32_t p = probabilities[i].probability;
 			TSymbol s;
-			//TODO check performances with +1 and without.
-			s.probability = ( ( symbol.probability * (unsigned int)(p<<8) )>>16); //probabilities[i].probability*symbol.probability;
+			s.probability = ( ( symbol.probability * (unsigned int)(p<<8) )>>16);
 			s.offset = pos;
 			s.length = symbol.length + 1;
 			assert(pos + symbol.length < buffer.size());
@@ -198,12 +232,10 @@ void Tunstall::createDecodingTables2() {
 	}
 	index.clear();
 	lengths.clear();
-	//table.clear();
 
 	//build table and index
 	index.resize(n_words);
 	lengths.resize(n_words);
-	//table.resize(table_length);
 	int word = 0;
 	for(size_t i = 0, row = 0; i < end; i++, row++) {
 		if(row >= n_symbols)
@@ -216,7 +248,7 @@ void Tunstall::createDecodingTables2() {
 		lengths[word] = s.length;
 		word++;
 	}
-	cout << "Table size: " << pos << endl;
+	//cout << "Table size: " << pos << endl;
 }
 
 void Tunstall::createDecodingTables() {
@@ -341,41 +373,12 @@ void Tunstall::createEncodingTables() {
 		}
 	}
 }
-unsigned char *Tunstall::RLEcompress(unsigned char *data, int input_size, int &output_size) {
-	int n_symbols = probabilities.size();
-	int len = 256 - n_symbols;
-	int zero_count = 0;
-	int pos = 0;
-	output_size = 0;
-	unsigned char *output = new unsigned char[input_size]; //use entropy here!
-
-	while(pos < input_size) {
-		unsigned char c = data[pos++];
-		unsigned char k = remap[c];
-		if(k == 0) {
-			zero_count++;
-			if(zero_count < len)
-				continue;
-		}
-		if(zero_count)
-			output[output_size++] = zero_count-1;
-		if(k != 0)
-			output[output_size++] = len + k;
-		zero_count = 0;
-	}
-	if(zero_count)
-		output[output_size++] = zero_count-1;
-	return output;
-}
 
 unsigned char *Tunstall::compress(unsigned char *data, int input_size, int &output_size) {
 	if(probabilities.size() == 1) {
 		output_size = 0;
 		return NULL;
 	}
-
-	if(probabilities[0].probability > rle_limit)
-		return RLEcompress(data, input_size, output_size);
 
 	unsigned char *output = new unsigned char[input_size*2]; //use entropy here!
 

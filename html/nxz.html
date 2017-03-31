@@ -64,7 +64,7 @@ loader.load( 'models/bunny.nxz', function(geometry) {
 	geometry.computeBoundingBox();
 
 	if(geometry.index) {
-		var material = new THREE.MeshStandardMaterial( { color: 0x0055ff, shading: THREE.SmoothShading, side: THREE.DoubleSide } );
+		var material = new THREE.MeshStandardMaterial( { vertexColors: THREE.VertexColors, shading: THREE.SmoothShading, side: THREE.DoubleSide } );
 		var mesh = new THREE.Mesh( geometry, material );
 	} else {
 		var material = new THREE.PointsMaterial( { size: 2, sizeAttenuation: false, vertexColors: THREE.VertexColors } );

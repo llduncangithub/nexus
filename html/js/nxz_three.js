@@ -22,7 +22,7 @@ THREE.NXZLoader.prototype = {
     decodeNxz: function(buffer) {
 
 		var now = performance.now();
-		var iter = 100;
+		var iter = 1;
 		for(var i = 0; i < iter; i++) {
 	        var decoder = new NxzDecoder(buffer);
 	        var mesh = decoder.decode();	

@@ -137,7 +137,7 @@ Stream.prototype = {
 				}
 
 				var val = bitstream.read(diff);
-				var middle = 1<<(diff-1);
+				var middle = (1<<(diff-1))>>>0;
 				if(val < middle)
 					val = -val -middle;
 				values[i*N + c] = val;
@@ -187,6 +187,7 @@ Tunstall.prototype = {
 
 		var queues = []; //array of arrays
 		var buffer = []; 
+
 
 		//initialize adding all symbols to queues
 		for(var i = 0; i < n_symbols; i++) {
@@ -258,15 +259,6 @@ Tunstall.prototype = {
 		var n_symbols = t.probs.length/2;
 		if(n_symbols <= 1) return;
 
-		var dictionary_size = 1<<this.wordsize;
-		//(max length is word dictionary? nope the removed ones dont count, 1 per step so add max 255 potentially deleted)
-        var queues = new Uint32Array(2*dictionary_size); //array of n symbols array of prob, position in buffer, length
-        var starts = new Uint32Array(dictionary_size); //starts of each queue
-		var end = 0; //keep track of queue end
-        var buffer = t.table = new Uint8Array(dictionary_size*dictionary_size); //worst case for 2 symbols. 1 with 254 prob and other qwith 1 prob
-		var pos = 0; //keep track of buffer first free space
-
-
 /*      QUEUE as column 
 
 		A  x  AA
@@ -275,20 +267,76 @@ Tunstall.prototype = {
 		T  T  TA
 */
 
-		//initialize adding all symbols to queues
-		for(var i = 0; i < n_symbols; i++) {
-			var symbol = t.probs[i*2];
-            var prob = t.probs[i*2+1];
-			starts[i] = i*3;
-			queues[i*3] = prob<<8;
-			queues[i*3+1] = pos;
-			queues[i*3+2] = 1;
-			buffer[pos++] = symbol;
-		}
-		end = n_symbols*3;
+		var dictionary_size = 1<<this.wordsize;
 
-		var n_words = n_symbols;
-		var table_length = n_symbols;
+		//TODO: fill index and length: saves *3, and memory (compact in place, later)
+
+		//(max length is word dictionary? nope the removed ones dont count, 1 per step so add max 255 potentially deleted)
+		var queues = new Uint32Array(2*dictionary_size*3); //array of n symbols array of prob, position in buffer, length //limit to 8k*3
+		var starts = new Uint32Array(n_symbols); //starts of each queue
+		var end = 0; //keep track of queue end
+		var buffer = t.table = new Uint8Array(dictionary_size*dictionary_size); //worst case for 2 symbols. 1 with 254 prob and other qwith 1 prob
+		var pos = 0; //keep track of buffer first free space
+		var table_length = 0;
+		var n_words = 0;
+
+		var count = 2;
+		var p0 = (t.probs[1] << 8)>>>0; //first symbol
+		var p1 = (t.probs[3]<<8)>>>0;    //second symbol.
+		var prob = (p0*p0)>>>16;
+		var max_count = (dictionary_size - 1)/(n_symbols - 1);
+		while(prob > p1 && count < max_count) {
+			prob = (prob*p0) >>> 16;
+			count++;
+		}
+
+		if(count >= 16) { //Very low entropy results in large tables > 8K.
+			buffer[pos++] = t.probs[0];
+			for(var k = 1; k < n_symbols; k++) {
+				for(var i = 0; i < count-1; i++)
+					buffer[pos++] = t.probs[0];
+				buffer[pos++] = t.probs[2*k];
+			}
+			starts[0] = (count-1)*n_symbols*3;
+			for(var k = 1; k < n_symbols; k++)
+				starts[k] = k*3;
+
+			prob = 0xffff;
+			for(var col = 0; col < count; col++) {
+				for(var row = 1; row < n_symbols; row++) {
+					var off = (row + col*n_symbols)*3;
+					queues[off] = (prob * (t.probs[row*2+1]<<8)) >> 16;
+					queues[off+1] = row*count - col;
+					queues[off+1] = col+1;
+				}
+				prob = (prob*p0) >>> 16;
+			}
+			var first = ((count-1)*n_symbols)*3;
+			queues[first] = prob;
+			queues[first+1] = 0;
+			queues[first+1] = count;
+			n_words = 1 + count*(n_symbols - 1);
+			table_length = n_words;
+			end = count*n_symbols;
+
+		} else {
+			//initialize adding all symbols to queues
+			for(var i = 0; i < n_symbols; i++) {
+				var symbol = t.probs[i*2];
+				var prob = t.probs[i*2+1];
+				queues[i*3] = prob<<8;
+				queues[i*3+1] = i;
+				queues[i*3+2] = 1;
+	
+				starts[i] = i*3;
+				buffer[i] = symbol;
+			}
+			pos = n_symbols;
+			end = n_symbols*3;
+
+			n_words = n_symbols;
+			table_length = n_symbols;
+		}
 
 		//at each step we grow all queues using the most probable sequence
 		while(n_words < dictionary_size - n_symbols +1) {
@@ -303,25 +351,25 @@ Tunstall.prototype = {
 				}
 			}
 			var start = starts[best];
-            var len = queues[start+2];
-            var offset = queues[start+1];
+			var offset = queues[start+1];
+			var len = queues[start+2];
 			for(var i = 0; i < n_symbols; i++) {
 				var sym = t.probs[i*2];
-				var prob = this.probs[i*2+1]<<8;
+				var prob = t.probs[i*2+1]<<8;
 				queues[end] = ((prob*queues[start])>>>16);
 				queues[end+1] = pos;
 				queues[end+2] = len + 1;
 				end += 3;
 
 				for(var k  = 0; k < len; k++)
-                    buffer[pos + k] = buffer[offset + k]; //copy sequence of symbols
+					buffer[pos + k] = buffer[offset + k]; //copy sequence of symbols
 
 				pos += len;
 				buffer[pos++] = sym; //append symbol
 			}
 			starts[best] += n_symbols*3; //move one column
 
-            table_length += (n_symbols-1)*(len + 1) +1;
+			table_length += (n_symbols-1)*(len + 1) +1;
 			n_words += n_symbols -1;
 		}
 
@@ -334,8 +382,8 @@ Tunstall.prototype = {
 				row  = 0;
 			if(starts[row] > i) continue; //skip deleted words
 
-            t.index[word] = queues[i+1];
-            t.lengths[word] = queues[i+2];
+			t.index[word] = queues[i+1];
+			t.lengths[word] = queues[i+2];
 			word++;
 		}
 	},

@@ -75,6 +75,7 @@ void Stream::tunstall_decompress(vector<uchar> &data) {
 
 	t.createDecodingTables2();
 
+
 	int size = read<int>();
 	data.resize(size);
 	int compressed_size = read<int>();

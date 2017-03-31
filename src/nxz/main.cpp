@@ -30,32 +30,20 @@ int main(int argc, char *argv[]) {
 		cerr << "Usage: " << argv[0] << " [file.ply]\n";
 		return 0;
 	}
+/*
+	for(int skip = 2; skip < 200; skip += 1) {
+		nx::Stream stream;
+		vector<uchar> a;
+		a.resize(1000, 0);
+		for(int i = 0; i < a.size(); i+= skip)
+			a[i] = 1;
 
-	nx::Stream stream;
-	vector<uchar> a;
-	a.resize(34000, 0);
-	for(int i = 0; i < a.size(); i+= 255)
-		a[i] = 1;
-	stream.compress(a.size(), &*a.begin());
+		stream.compress(a.size(), &*a.begin());
 
-	cout << "Stream.size:" << stream.size() << endl;
-
-	stream.rewind();
-	vector<uchar> b;
-	stream.decompress(b);
-
-	/*
-	for(int i = 0; i < a.size(); i++) {
-		cout << (int)a[i] << " ";
-	}
-	cout << endl;
-
-	for(int i = 0; i < b.size(); i++) {
-		cout << (int)b[i] << " ";
-	}
-	cout << endl; */
-
-	exit(0);
+		stream.rewind();
+		vector<uchar> b;
+		stream.decompress(b);
+	} */
 
 	NxMesh mesh;
 	if(tri::io::ImporterPLY<NxMesh>::Open(mesh, argv[1]) != 0) {

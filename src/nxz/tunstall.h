@@ -57,9 +57,6 @@ public:
 	void createDecodingTables2();
 	void createEncodingTables();
 
-	void createRLETables();
-	unsigned char *RLEcompress(unsigned char *data, int input_size, int &output_size);
-
 	//data 1 symbol 1 char, if using binary input convert them, the output is in bits though.
 	//set probabilities and create tables before this.
 	//output is padded, careful!
