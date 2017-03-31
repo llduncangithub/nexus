@@ -32,13 +32,19 @@ int main(int argc, char *argv[]) {
 	}
 
 	nx::Stream stream;
-	vector<uchar> a = {0, 1, 0, 1, 0, 2, 0, 0, 3, 0};
+	vector<uchar> a;
+	a.resize(34000, 0);
+	for(int i = 0; i < a.size(); i+= 255)
+		a[i] = 1;
 	stream.compress(a.size(), &*a.begin());
+
+	cout << "Stream.size:" << stream.size() << endl;
 
 	stream.rewind();
 	vector<uchar> b;
 	stream.decompress(b);
 
+	/*
 	for(int i = 0; i < a.size(); i++) {
 		cout << (int)a[i] << " ";
 	}
@@ -47,9 +53,9 @@ int main(int argc, char *argv[]) {
 	for(int i = 0; i < b.size(); i++) {
 		cout << (int)b[i] << " ";
 	}
-	cout << endl;
+	cout << endl; */
 
-//	exit(0);
+	exit(0);
 
 	NxMesh mesh;
 	if(tri::io::ImporterPLY<NxMesh>::Open(mesh, argv[1]) != 0) {
@@ -136,7 +142,7 @@ int main(int argc, char *argv[]) {
 	QTime time;
 	time.start();
 
-	int iter = 100;
+	int iter = 1;
 	for(int i = 0; i < iter; i++) {
 		nx::NxzDecoder decoder(encoder.stream.size(), encoder.stream.data());
 		decoder.setPositions((float *)&*recoords.begin());

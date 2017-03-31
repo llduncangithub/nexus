@@ -260,10 +260,10 @@ Tunstall.prototype = {
 
 		var dictionary_size = 1<<this.wordsize;
 		//(max length is word dictionary? nope the removed ones dont count, 1 per step so add max 255 potentially deleted)
-		var queues = new Uint32Array(dictionary_size + 255); //array of n symbols array of prob, position in buffer, length
-		var starts = new Uint32Array(255); //starts of each queue
+        var queues = new Uint32Array(2*dictionary_size); //array of n symbols array of prob, position in buffer, length
+        var starts = new Uint32Array(dictionary_size); //starts of each queue
 		var end = 0; //keep track of queue end
-		var buffer = new Uint8Array( ((dictionary_size+2)*dictionary_size)); //worst case for 2 symbols. 1 with 254 prob and other qwith 1 prob
+        var buffer = t.table = new Uint8Array(dictionary_size*dictionary_size); //worst case for 2 symbols. 1 with 254 prob and other qwith 1 prob
 		var pos = 0; //keep track of buffer first free space
 
 
@@ -278,7 +278,7 @@ Tunstall.prototype = {
 		//initialize adding all symbols to queues
 		for(var i = 0; i < n_symbols; i++) {
 			var symbol = t.probs[i*2];
-			var prob = t.probs[i+1];
+            var prob = t.probs[i*2+1];
 			starts[i] = i*3;
 			queues[i*3] = prob<<8;
 			queues[i*3+1] = pos;
@@ -303,44 +303,40 @@ Tunstall.prototype = {
 				}
 			}
 			var start = starts[best];
+            var len = queues[start+2];
+            var offset = queues[start+1];
 			for(var i = 0; i < n_symbols; i++) {
 				var sym = t.probs[i*2];
 				var prob = this.probs[i*2+1]<<8;
-				var len = queues[start+2];
 				queues[end] = ((prob*queues[start])>>>16);
 				queues[end+1] = pos;
 				queues[end+2] = len + 1;
 				end += 3;
 
 				for(var k  = 0; k < len; k++)
-					buffer[pos + k] = buffer[queues[start+1] + k]; //copy sequence of symbols
+                    buffer[pos + k] = buffer[offset + k]; //copy sequence of symbols
 
 				pos += len;
 				buffer[pos++] = sym; //append symbol
 			}
 			starts[best] += n_symbols*3; //move one column
 
-			table_length += (n_symbols-1)*(symbol[2] + 1) +1; 
+            table_length += (n_symbols-1)*(len + 1) +1;
 			n_words += n_symbols -1;
 		}
 
 		t.index = new Uint32Array(n_words);
 		t.lengths = new Uint32Array(n_words);
-		t.table = new Uint8Array(table_length);
 		var word = 0;
 		var count = 0;
-		var len;
 		for(i = 0, row = 0; i < end; i += 3, row++) {
 			if(row >= n_symbols)
 				row  = 0;
 			if(starts[row] > i) continue; //skip deleted words
 
-			t.index[word] = count;
-			t.lengths[word] = len = queues[i+2];
+            t.index[word] = queues[i+1];
+            t.lengths[word] = queues[i+2];
 			word++;
-			for(var j = 0; j < len; j++)
-				t.table[count+j] = buffer[queues[i+1] + j];
-			count += len;
 		}
 	},
 	_decompress: function(input, input_size, output, output_size) {

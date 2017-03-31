@@ -38,6 +38,8 @@ namespace nx {
 
 class Tunstall {
 public:
+
+	const int rle_limit = 255;
 	//word size 8 means use 8 bit blocks.
 	Tunstall(int _wordsize = 8, int _lookup = 2): wordsize(_wordsize), lookup_size(_lookup) {}
 
@@ -54,6 +56,9 @@ public:
 	void createDecodingTables();
 	void createDecodingTables2();
 	void createEncodingTables();
+
+	void createRLETables();
+	unsigned char *RLEcompress(unsigned char *data, int input_size, int &output_size);
 
 	//data 1 symbol 1 char, if using binary input convert them, the output is in bits though.
 	//set probabilities and create tables before this.
@@ -112,6 +117,7 @@ public:
 	//user for encoding structure: returns interval in offset table used by word
 	void wordCode(unsigned char *w, int length, int &low, int &high) {
 		int n_symbols = probabilities.size();
+
 		//counting in base n_symbols
 		int c = 0;
 		for(int i = 0; i < length && i < lookup_size; i++) {

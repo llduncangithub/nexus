@@ -116,16 +116,38 @@ void Tunstall::setProbabilities(float *probs, int n_symbols) {
 		probabilities.push_back(Symbol(i, probs[i]*255));
 	}
 }
+void Tunstall::createRLETables() {
+	int dictionary_size = 1<<wordsize;
+	int n_symbols = probabilities.size();
+	int len = dictionary_size - n_symbols;
+	table.resize(dictionary_size, 0);
+	index.resize(dictionary_size);
+	lengths.resize(dictionary_size);
+	for(int i = 0; i <= len; i++) {
+		index[i] = 0;
+		lengths[i] = i+1;
+	}
+	for(int i = 1; i < n_symbols; i++) {
+		index[len + i] = len + i;
+		lengths[len + i] = 1;
+		table[len + i] = i;
+	}
+}
 
 void Tunstall::createDecodingTables2() {
 	int n_symbols = probabilities.size();
 	if(n_symbols <= 1) return;
 
+	if(probabilities[0].probability > rle_limit) { //sort of length encoding.
+		createRLETables();
+		return;
+	}
+
 	int dictionary_size = 1<<wordsize;
-	std::vector<TSymbol> queues(dictionary_size +  255); ///TODO fix aaarrgghhh
+	std::vector<TSymbol> queues(2*dictionary_size);
 	size_t end = 0;
 	vector<unsigned char> &buffer = table;
-	buffer.resize((dictionary_size+2)*dictionary_size);
+	buffer.resize(dictionary_size*dictionary_size);
 	int pos = 0; //keep track of buffer lenght/
 	vector<int> starts(n_symbols);
 
@@ -174,7 +196,6 @@ void Tunstall::createDecodingTables2() {
 		table_length += (n_symbols-1)*(symbol.length + 1) +1;
 		n_words += n_symbols -1;
 	}
-	//cout << "Table length: " << table_length << " Buffer: " << pos << endl;
 	index.clear();
 	lengths.clear();
 	//table.clear();
@@ -184,7 +205,6 @@ void Tunstall::createDecodingTables2() {
 	lengths.resize(n_words);
 	//table.resize(table_length);
 	int word = 0;
-	pos = 0;
 	for(size_t i = 0, row = 0; i < end; i++, row++) {
 		if(row >= n_symbols)
 			row = 0;
@@ -195,9 +215,8 @@ void Tunstall::createDecodingTables2() {
 		index[word] = s.offset;
 		lengths[word] = s.length;
 		word++;
-		//memcpy(&table[pos], &buffer[s.offset], s.length);
-		//pos += s.length;
 	}
+	cout << "Table size: " << pos << endl;
 }
 
 void Tunstall::createDecodingTables() {
@@ -278,6 +297,7 @@ void Tunstall::createDecodingTables() {
 }
 
 void Tunstall::createEncodingTables() {
+
 	int n_symbols = probabilities.size();
 	if(n_symbols <= 1) return; //not much to compress
 	//we need to reverse the table and index
@@ -291,6 +311,9 @@ void Tunstall::createEncodingTables() {
 		remap[s.symbol] = i;
 	}
 
+	if(probabilities[0].probability > rle_limit) return;
+
+
 	offsets.clear();
 	offsets.resize(lookup_table_size, 0xffffff); //this is enough for quite large tables.
 	for(size_t i = 0; i < index.size(); i++) {
@@ -300,8 +323,9 @@ void Tunstall::createEncodingTables() {
 		while(1) {
 			wordCode(&table[index[i] + offset], lengths[i] - offset, low, high);
 			if(lengths[i] - offset <= lookup_size) {
-				for(int k = low; k < high; k++)
+				for(int k = low; k < high; k++) {
 					offsets[table_offset + k] = i;
+				}
 				break;
 			}
 
@@ -317,12 +341,42 @@ void Tunstall::createEncodingTables() {
 		}
 	}
 }
+unsigned char *Tunstall::RLEcompress(unsigned char *data, int input_size, int &output_size) {
+	int n_symbols = probabilities.size();
+	int len = 256 - n_symbols;
+	int zero_count = 0;
+	int pos = 0;
+	output_size = 0;
+	unsigned char *output = new unsigned char[input_size]; //use entropy here!
+
+	while(pos < input_size) {
+		unsigned char c = data[pos++];
+		unsigned char k = remap[c];
+		if(k == 0) {
+			zero_count++;
+			if(zero_count < len)
+				continue;
+		}
+		if(zero_count)
+			output[output_size++] = zero_count-1;
+		if(k != 0)
+			output[output_size++] = len + k;
+		zero_count = 0;
+	}
+	if(zero_count)
+		output[output_size++] = zero_count-1;
+	return output;
+}
 
 unsigned char *Tunstall::compress(unsigned char *data, int input_size, int &output_size) {
 	if(probabilities.size() == 1) {
 		output_size = 0;
 		return NULL;
 	}
+
+	if(probabilities[0].probability > rle_limit)
+		return RLEcompress(data, input_size, output_size);
+
 	unsigned char *output = new unsigned char[input_size*2]; //use entropy here!
 
 	assert(wordsize <= 16);
@@ -367,7 +421,7 @@ void Tunstall::decompress(unsigned char *data, int input_size, unsigned char *ou
 		memset(output, probabilities[0].symbol, output_size);
 		return;
 	}
-	index.push_back(index.back() + lengths.back());
+	index.push_back(index.back() + lengths.back()); //TODO WHY?
 	while(data < end_data) {
 		int symbol = *data++;
 		int start = index[symbol];
