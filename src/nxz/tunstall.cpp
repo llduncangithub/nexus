@@ -134,7 +134,6 @@ void Tunstall::createDecodingTables2() {
 	vector<int> starts(n_symbols);
 
 	int n_words = 0;
-	int table_length = 0;
 
 	int count = 2;
 	uint32_t p0 = probabilities[0].probability<<8;
@@ -165,28 +164,31 @@ void Tunstall::createDecodingTables2() {
 		for(int k = 1; k < n_symbols; k++)
 			starts[k] = k;
 
-		prob = 0xffff;
 		for(int col = 0; col < count; col++) {
 			for(int row = 1; row < n_symbols; row++) {
 				TSymbol &s = queues[row + col*n_symbols];
-				s.probability = (prob * (probabilities[row].probability<<8)) >> 16;
+				if(col == 0)
+					s.probability = (probabilities[row].probability<<8);
+				else
+					s.probability = (prob * (probabilities[row].probability<<8)) >> 16;
 				s.offset = row*count - col;
 				s.length = col+1;
 			}
-			prob = ((prob*p0) >> 16);
+			if(col == 0)
+				prob = p0;
+			else
+				prob = (prob*p0) >> 16;
 		}
 		TSymbol &first = queues[(count-1)*n_symbols];
 		first.probability = prob;
 		first.offset = 0;
 		first.length = count;
 		n_words = 1 + count*(n_symbols - 1);
-		table_length = n_words;
 		end = count*n_symbols;
 		assert(n_words == pos);
 
 	} else {
 		n_words = n_symbols;
-		table_length = n_symbols;
 		//initialize adding all symbols to queues
 		for(int i = 0; i < n_symbols; i++) {
 			TSymbol s;
@@ -199,7 +201,6 @@ void Tunstall::createDecodingTables2() {
 			buffer[pos++] = probabilities[i].symbol;
 		}
 	}
-
 
 	while(n_words < dictionary_size - n_symbols +1) {
 		//find highest probability word
@@ -227,7 +228,6 @@ void Tunstall::createDecodingTables2() {
 			queues[end++] = s;
 		}
 		starts[best] += n_symbols;
-		table_length += (n_symbols-1)*(symbol.length + 1) +1;
 		n_words += n_symbols -1;
 	}
 	index.clear();

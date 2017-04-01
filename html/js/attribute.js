@@ -273,8 +273,8 @@ NormalAttr.prototype.toSphere = function(i, v, buffer, unit) {
 	buffer[k+1] = v[j+1];
 	buffer[k+2] = unit - av0 - av1;
 	if (buffer[k+2] < 0) {
-		buffer[k] = ((v[j] > 0)? 1 : -1)*(unit - av1);
-		buffer[k+1] = ((v[j+1] > 0)? 1 : -1)*(unit - av0);
+		buffer[k] = (v[j] > 0)? unit - av1 : av1 - unit;
+		buffer[k+1] = (v[j+1] > 0)? unit - av0: av0 - unit;
 	}
 	var len = 1/Math.sqrt(buffer[k]*buffer[k] + buffer[k+1]*buffer[k+1] + buffer[k+2]*buffer[k+2]);
 	if(t.type == t.Type.INT16) {

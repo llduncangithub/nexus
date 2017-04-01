@@ -39,9 +39,6 @@ public:
 			g = stream.read<uint32_t>();
 
 		stream.decompress(clers);
-		for(int i = 0; i < 10; i++)
-			cout << (int)clers[i] << " ";
-		cout << endl;
 		stream.read(bitstream);
 	}
 };

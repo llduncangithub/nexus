@@ -22,27 +22,27 @@ BitStream = function(array) {
 	t.current = array[0];
 	t.position = 0; //position in the buffer
 	t.pending = 32;  //bits still to read
-	t.mask = new Uint32Array([0x00, 0x01, 0x03, 0x07, 0x0f, 0x01f, 0x03f, 0x07f, 0xff, 
-		0x01ff, 0x03ff, 0x07ff, 0x0fff, 0x01fff, 0x03fff, 0x07fff, 0xffff, 0x01ffff,
-		0x03ffff, 0x07ffff, 0x0fffff, 0x01fffff, 0x03fffff, 0x07fffff, 0xffffff, 0x01ffffff,
-		0x03ffffff,  0x07ffffff,  0x0fffffff, 0x01fffffff, 0x03fffffff, 0x7fffffff]);
-
 };
  
 BitStream.prototype = { 
 	read: function(bits) {
 		var t = this;
-		var result = 0;
+		var result;
 		if(bits > t.pending) {
-			result |= (t.current << (bits - t.pending))>>>0;
-			bits -= t.pending;
+			result = (t.current << (bits - t.pending))>>>0;
 			t.current = t.a[++t.position];
-			t.pending = 32;
+			t.pending += 32 - bits;
+			result |= (t.current >>> t.pending);
+			t.current = (t.current & ((1<<t.pending)-1))>>>0; //slighting faster than mask.
+
+		} else {
+			t.pending -= bits;
+			result = (t.current >>> t.pending);
+			t.current = (t.current & ((1<<t.pending)-1))>>>0; //slighting faster than mask.
+			return result;
 		}
-		t.pending -= bits;
-		result |= (t.current >>> t.pending);
-		t.current = (t.current & t.mask[t.pending])>>>0;
 		return result;
+
 	}
 };
 
@@ -58,6 +58,7 @@ Stream = function(buffer) {
 }
 
 Stream.prototype = {
+	logs: new Uint8Array(16768), 
 	readChar: function() {
 		var c = this.buffer[this.pos++];
 		if(c > 127) c -= 256;
@@ -104,33 +105,38 @@ Stream.prototype = {
 		var bitstream = t.readBitStream();
 
 		var tunstall = new Tunstall;
-		var logs = tunstall.decompress(this);
+		while(t.logs.length < values.length)
+			t.logs = new Uint8Array(values.length);
 
-		for(var i =0; i < logs.length; i++) {
-			var diff = logs[i];
+		tunstall.decompress(this, t.logs);
+
+		for(var i =0; i < t.logs.readed; i++) {
+			var diff = t.logs[i];
 			if(diff == 0) {
 				for(var c = 0; c < N; c++)
 					values[i*N + c] = 0;
 				continue;
 			}
-//			var max = t.max[diff];
 			var max = (1<<diff)>>>1;
 			for(var c = 0; c < N; c++)
 				values[i*N + c] = bitstream.read(diff) - max;
 		}
-		return logs.length;
+		return t.logs.readed;
 	},
 
 	decodeValues: function(N, values) {
 		var t = this;
 		var bitstream = t.readBitStream();
 		var tunstall = new Tunstall;
+		var size = values.length/N;
+		while(t.logs.length < size)
+			t.logs = new Uint8Array(size);
 
 		for(var c = 0; c < N; c++) {
-			var logs = tunstall.decompress(this);
+			tunstall.decompress(this, t.logs);
 
-			for(var i = 0; i < logs.length; i++) {
-				var diff = logs[i];
+			for(var i = 0; i < t.logs.readed; i++) {
+				var diff = t.logs[i];
 				if(diff == 0) {
 					values[i*N + c] = 0;
 					continue;
@@ -143,33 +149,51 @@ Stream.prototype = {
 				values[i*N + c] = val;
 			}
 		}
-		return logs.lenght;
+		return t.logs.readed;
 	}
 };
 
 
+/*
+function Tunstall(wordsize) {
+	var t = this;
+	t.wordsize = wordsize? wordsize : 8;
 
-function Tunstall(wordsize, lookup_size) {
-	this.wordsize = wordsize? wordsize : 8;
-	this.lookup_size = lookup_size? lookup_size : 8;
+	t.dictionary_size = 1<<this.wordsize;
+	t.starts = new Uint32Array(t.dictionary_size); //starts of each queue
+	t.queue = new Uint32Array(2*t.dictionary_size); //array of n symbols array of prob, position in buffer, length //limit to 8k*3
+	t.index = new Uint32Array(2*t.dictionary_size);
+	t.lengths = new Uint32Array(2*t.dictionary_size);
+//	t.table = new Uint8Array(dictionary_size*dictionary_size); //worst case for 2 symbols. 1 with 254 prob and other qwith 1 prob
+	t.table = new Uint8Array(8192); //worst case for 2 symbols. 1 with 254 prob and other qwith 1 prob
+}*/
+
+
+function Tunstall() {
 }
-
-/*function Tunstall() {
-}
-
-Tunstall.prototype.wordsize = 8;
-Tunstall.prototype.lookup_size = 8; */
-
 
 
 Tunstall.prototype = {
-	decompress: function(stream) {
+	wordsize: 8,
+	dictionary_size: 256,
+	starts: new Uint32Array(256), //starts of each queue
+	queue: new Uint32Array(512), //array of n symbols array of prob, position in buffer, length //limit to 8k*3
+	index: new Uint32Array(512),
+	lengths: new Uint32Array(512),
+	table: new Uint8Array(8192), //worst case for 2 
+
+	decompress: function(stream, data) {
 		var nsymbols = stream.readUChar();
 		this.probs = stream.readArray(nsymbols*2);
 		this.createDecodingTables2();
 		var size = stream.readInt();
 		if(size > 100000000) throw("TOO LARGE!");
-		var data = new Uint8Array(size);
+		if(!data)
+			data = new Uint8Array(size);
+		if(data.length < size)
+			throw "Array for results too small";
+		data.readed = size;
+
 		var compressed_size = stream.readInt();
 		if(size > 100000000) throw("TOO LARGE!");
 		var compressed_data = stream.readArray(compressed_size);
@@ -178,7 +202,7 @@ Tunstall.prototype = {
 		return data;
 	}, 
 
-	createDecodingTables: function() {
+	/* createDecodingTables: function() {
 		//read symbol,prob,symbol,prob as uchar.
 		//Here probs will range from 0 to 0xffff for better precision
 
@@ -251,139 +275,120 @@ Tunstall.prototype = {
 				pos += s[2]; //length
 			}
 		}
-	},
+	}, */
 	createDecodingTables2: function() {
-		//Here probs will range from 0 to 0xffff for better precision
 
 		var t = this;
 		var n_symbols = t.probs.length/2;
 		if(n_symbols <= 1) return;
 
-/*      QUEUE as column 
+		var queue = Tunstall.prototype.queue;
 
-		A  x  AA
-		C  C  CA
-		G  G  GA
-		T  T  TA
-*/
-
-		var dictionary_size = 1<<this.wordsize;
-
-		//TODO: fill index and length: saves *3, and memory (compact in place, later)
-
-		//(max length is word dictionary? nope the removed ones dont count, 1 per step so add max 255 potentially deleted)
-		var queues = new Uint32Array(2*dictionary_size*3); //array of n symbols array of prob, position in buffer, length //limit to 8k*3
-		var starts = new Uint32Array(n_symbols); //starts of each queue
 		var end = 0; //keep track of queue end
-		var buffer = t.table = new Uint8Array(dictionary_size*dictionary_size); //worst case for 2 symbols. 1 with 254 prob and other qwith 1 prob
 		var pos = 0; //keep track of buffer first free space
-		var table_length = 0;
 		var n_words = 0;
 
-		var count = 2;
-		var p0 = (t.probs[1] << 8)>>>0; //first symbol
-		var p1 = (t.probs[3]<<8)>>>0;    //second symbol.
+		//Here probs will range from 0 to 0xffff for better precision
+		for(let i = 0; i < n_symbols; i++)
+			queue[i] = t.probs[2*i+1] << 8;
+
+		var max_repeat = (t.dictionary_size - 1)/(n_symbols - 1);
+		var repeat = 2;
+		var p0 = queue[0];
+		var p1 = queue[1];
 		var prob = (p0*p0)>>>16;
-		var max_count = (dictionary_size - 1)/(n_symbols - 1);
-		while(prob > p1 && count < max_count) {
-			prob = (prob*p0) >>> 16;
-			count++;
+		while(prob > p1 && repeat < max_repeat) {
+			prob = (prob*p0)>>> 16;
+			repeat++;
 		}
 
-		if(count >= 16) { //Very low entropy results in large tables > 8K.
-			buffer[pos++] = t.probs[0];
+		if(repeat >= 16) { //Very low entropy results in large tables > 8K.
+			t.table[pos++] = t.probs[0];
 			for(var k = 1; k < n_symbols; k++) {
-				for(var i = 0; i < count-1; i++)
-					buffer[pos++] = t.probs[0];
-				buffer[pos++] = t.probs[2*k];
+				for(var i = 0; i < repeat-1; i++)
+					t.table[pos++] = t.probs[0];
+				t.table[pos++] = t.probs[2*k];
 			}
-			starts[0] = (count-1)*n_symbols*3;
+			t.starts[0] = (repeat-1)*n_symbols;
 			for(var k = 1; k < n_symbols; k++)
-				starts[k] = k*3;
+				t.starts[k] = k;
 
-			prob = 0xffff;
-			for(var col = 0; col < count; col++) {
+			for(var col = 0; col < repeat; col++) {
 				for(var row = 1; row < n_symbols; row++) {
-					var off = (row + col*n_symbols)*3;
-					queues[off] = (prob * (t.probs[row*2+1]<<8)) >> 16;
-					queues[off+1] = row*count - col;
-					queues[off+1] = col+1;
+					var off = (row + col*n_symbols);
+					if(col > 0)
+						queue[off] = (prob * queue[row]) >> 16;
+					t.index[off] = row*repeat - col;
+					t.lengths[off] = col+1;
 				}
-				prob = (prob*p0) >>> 16;
+				if(col == 0)
+					prob = p0;
+				else
+					prob = (prob*p0) >>> 16;
 			}
-			var first = ((count-1)*n_symbols)*3;
-			queues[first] = prob;
-			queues[first+1] = 0;
-			queues[first+1] = count;
-			n_words = 1 + count*(n_symbols - 1);
-			table_length = n_words;
-			end = count*n_symbols;
+			var first = ((repeat-1)*n_symbols);
+			queue[first] = prob;
+			t.index[first] = 0;
+			t.lengths[first] = repeat;
+
+			n_words = 1 + repeat*(n_symbols - 1);
+			end = repeat*n_symbols;
 
 		} else {
 			//initialize adding all symbols to queues
 			for(var i = 0; i < n_symbols; i++) {
-				var symbol = t.probs[i*2];
-				var prob = t.probs[i*2+1];
-				queues[i*3] = prob<<8;
-				queues[i*3+1] = i;
-				queues[i*3+2] = 1;
+				queue[i] = t.probs[i*2+1]<<8;
+				t.index[i] = i;
+				t.lengths[i] = 1;
 	
-				starts[i] = i*3;
-				buffer[i] = symbol;
+				t.starts[i] = i;
+				t.table[i] = t.probs[i*2];
 			}
 			pos = n_symbols;
-			end = n_symbols*3;
-
+			end = n_symbols;
 			n_words = n_symbols;
-			table_length = n_symbols;
 		}
 
 		//at each step we grow all queues using the most probable sequence
-		while(n_words < dictionary_size - n_symbols +1) {
+		while(n_words < t.dictionary_size - n_symbols +1) {
 			//find highest probability word
 			var best = 0;
 			var max_prob = 0;
 			for(var i = 0; i < n_symbols; i++) {
-				var p = queues[starts[i]]; //front of queue probability.
+				var p = queue[t.starts[i]]; //front of queue probability.
 				if(p > max_prob) {
 					best = i;
 					max_prob = p;
 				}
 			}
-			var start = starts[best];
-			var offset = queues[start+1];
-			var len = queues[start+2];
+			var start = t.starts[best];
+			var offset = t.index[start];
+			var len = t.lengths[start];
+
 			for(var i = 0; i < n_symbols; i++) {
-				var sym = t.probs[i*2];
-				var prob = t.probs[i*2+1]<<8;
-				queues[end] = ((prob*queues[start])>>>16);
-				queues[end+1] = pos;
-				queues[end+2] = len + 1;
-				end += 3;
+				queue[end] = (queue[i] * queue[start])>>>16;
+				t.index[end] = pos;
+				t.lengths[end] = len + 1;
+				end++;
 
 				for(var k  = 0; k < len; k++)
-					buffer[pos + k] = buffer[offset + k]; //copy sequence of symbols
-
+					t.table[pos + k] = t.table[offset + k]; //copy sequence of symbols
 				pos += len;
-				buffer[pos++] = sym; //append symbol
+				t.table[pos++] = t.probs[i*2]; //append symbol
 			}
-			starts[best] += n_symbols*3; //move one column
-
-			table_length += (n_symbols-1)*(len + 1) +1;
+			t.starts[best] += n_symbols; //move one column
 			n_words += n_symbols -1;
 		}
 
-		t.index = new Uint32Array(n_words);
-		t.lengths = new Uint32Array(n_words);
+
 		var word = 0;
-		var count = 0;
-		for(i = 0, row = 0; i < end; i += 3, row++) {
+		for(i = 0, row = 0; i < end; i ++, row++) {
 			if(row >= n_symbols)
 				row  = 0;
-			if(starts[row] > i) continue; //skip deleted words
+			if(t.starts[row] > i) continue; //skip deleted words
 
-			t.index[word] = queues[i+1];
-			t.lengths[word] = queues[i+2];
+			t.index[word] = t.index[i];
+			t.lengths[word] = t.lengths[i];
 			word++;
 		}
 	},

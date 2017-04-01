@@ -223,7 +223,6 @@ public:
 
 		for(int c = 0; c < N; c++) {
 			decompress(logs);
-
 			for(uint32_t i = 0; i < logs.size(); i++) {
 				uchar &diff = logs[i];
 				if(diff == 0) {
