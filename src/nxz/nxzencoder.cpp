@@ -494,7 +494,7 @@ void NxzEncoder::encodeFaces(int start, int end) {
 
 			if(split) {
 				index.clers.push_back(SPLIT);
-				index.bitstream.writeUint(split, 3);
+				index.bitstream.write(split, 3);
 			}
 
 			for(int k = 0; k < 3; k++) {
@@ -502,7 +502,7 @@ void NxzEncoder::encodeFaces(int start, int end) {
 				int &enc = encoded[vindex];
 
 				if(enc != -1) {
-					index.bitstream.writeUint(enc, splitbits);
+					index.bitstream.write(enc, splitbits);
 				} else {
 					//quad uses presorting indexing. (diff in attribute are sorted, values are not).
 					prediction[current_vertex] = Quad(vindex, last_index, last_index, last_index);
@@ -602,7 +602,7 @@ void NxzEncoder::encodeFaces(int start, int end) {
 			index.clers.push_back(VERTEX);
 			if(encoded[opposite] != -1) {
 				index.clers.push_back(SPLIT);
-				index.bitstream.writeUint(encoded[opposite], splitbits);
+				index.bitstream.write(encoded[opposite], splitbits);
 
 			} else {
 				//vertex needed for parallelogram prediction

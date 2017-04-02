@@ -192,34 +192,27 @@ NormalAttr.prototype.deltaDecode = function(nvert, context) {
 	}
 };
 
-/*NormalAttr.prototype.postDelta = function(uint32_t nvert, uint32_t nface,
-						   std::map<std::string, Attribute23 *> &attrs,
-						   IndexAttr &index) {
+NormalAttr.prototype.postDelta = function(nvert, nface, attrs, index) {
+	var t = this;
 	//for border and estimate we need the position already deltadecoded but before dequantized
-	if(prediction == DIFF)
+	if(t.prediction == t.Prediction.DIFF)
 		return;
 
-	if(attrs.find("position") == attrs.end())
+	if(!attrs.position)
 		throw "No position attribute found. Use DIFF normal strategy instead.";
 
-	GenericAttr<int> *coord = dynamic_cast<GenericAttr<int> *>(attrs["position"]);
-	if(!coord)
-		throw "Position attr has been overloaded, Use DIFF normal strategy instead.";
+	var coord = attrs.position;
 
-	vector<Point3f> estimated(nvert, Point3f(0, 0, 0));
-	if(index.faces32)
-		estimateNormals<uint32_t>(nvert, (Point3i *)coord->buffer, nface, index.faces32, estimated);
-	else
-		estimateNormals<uint16_t>(nvert, (Point3i *)coord->buffer, nface, index.faces16, estimated);
+	var estimated = new Float32Array(nvert*3);
+	t.estimateNormals(nvert, coord.values, nface, index.values, estimated);
 
-	if(prediction == BORDER) {
-		if(index.faces32)
-			markBoundary<uint32_t>(nvert, nface, index.faces32, boundary);
-		else
-			markBoundary<uint16_t>(nvert, nface, index.faces16, boundary);
+	if(t.prediction == t.Precition.BORDER) {
+		t.boundary = new Uint8Array(nvert);
+		t.markBoundary(nvert, nface, index, boundary);
 	}
 
-	switch(format) {
+	t.computeNormals(nvert, estimated);
+/*	switch(format) {
 	case FLOAT:
 		computeNormals((Point3f *)buffer, estimated);
 		break;
@@ -227,8 +220,8 @@ NormalAttr.prototype.deltaDecode = function(nvert, context) {
 		computeNormals((Point3s *)buffer, estimated);
 		break;
 	default: throw "Format not supported for normal attribute (float, int16 only)";
-	}
-} */
+	}*/
+} 
 
 
 
@@ -241,48 +234,87 @@ NormalAttr.prototype.dequantize = function(nvert) {
 		t.toSphere(i, t.values, t.buffer, t.q)
 }
 
-/*
-NormalAttr.prototype.computeNormals(Point3s *normals, std::vector<Point3f> &estimated) {
-	uint32_t nvert = estimated.size();
 
-	int count = 0; //here for the border.
-	for(unsigned int i = 0; i < nvert; i++) {
-		Point3f &e = estimated[i];
-		int32_t *d = &diffs[count*2];
-		Point3s &n = normals[i];
+NormalAttr.prototype.computeNormals(nvert, estimated) {
 
-		if(prediction == ESTIMATED || boundary[i]) {8 1 0
-			Point2i qn = toOcta(e, (int)q);
-			n = toSphere(Point2s(qn[0] + d[0], qn[0] + d[1]), (int)q);
-			count++;
-		} else {//no correction
-			for(int k = 0; k < 3; k++)
-				n[k] = (int16_t)(e[k]*32767.0f);
+	var count = 0; //here for the border.
+	if(t.prediction == t.Prediction.ESTIMATED) {
+		for(var i = 0; i < nvert; i++) {
+			t.toOcta(i, estimated, values, t.q);
+			t.toSphere(i, t.buffer, t.values, (int)q);
+		}
+	} else { //BORDER
+		for(var i = 0; i < nvert; i++) {
+			Point3f &e = estimated[i];
+			int32_t *d = &diffs[count*2];
+			Point3s &n = normals[i];
+
+			if(boundary[i]) {
+				Point2i qn = toOcta(e, (int)q);
+				n = toSphere(Point2s(qn[0] + d[0], qn[0] + d[1]), (int)q);
+				count++;
+			} else {//no correction
+				for(int k = 0; k < 3; k++)
+					n[k] = (int16_t)(e[k]*32767.0f);
+			}
 		}
 	}
-}*/
+}
 
-NormalAttr.prototype.toSphere = function(i, v, buffer, unit) {
+NormalAttr.prototype.toSphere = function(i, input, out, unit) {
 
 	var t = this;
 	var j = i*2;
 	var k = i*3;
-	var av0 = v[j] > 0? v[j]:-v[j];
-	var av1 = v[j+1] > 0? v[j+1]:-v[j+1];
-	buffer[k] = v[j];
-	buffer[k+1] = v[j+1];
-	buffer[k+2] = unit - av0 - av1;
-	if (buffer[k+2] < 0) {
-		buffer[k] = (v[j] > 0)? unit - av1 : av1 - unit;
-		buffer[k+1] = (v[j+1] > 0)? unit - av0: av0 - unit;
+	var av0 = input[j] > 0? input[j]:-input[j];
+	var av1 = input[j+1] > 0? input[j+1]:-input[j+1];
+	out[k] = input[j];
+	out[k+1] = input[j+1];
+	out[k+2] = unit - av0 - av1;
+	if (out[k+2] < 0) {
+		out[k] = (input[j] > 0)? unit - av1 : av1 - unit;
+		out[k+1] = (input[j+1] > 0)? unit - av0: av0 - unit;
 	}
-	var len = 1/Math.sqrt(buffer[k]*buffer[k] + buffer[k+1]*buffer[k+1] + buffer[k+2]*buffer[k+2]);
+	var len = 1/Math.sqrt(out[k]*out[k] + out[k+1]*out[k+1] + out[k+2]*out[k+2]);
 	if(t.type == t.Type.INT16) {
 		len *= 32767;
 	}
-	buffer[k] *= len;
-	buffer[k+1] *= len;
-	buffer[k+2] *= len;
+	out[k] *= len;
+	out[k+1] *= len;
+	out[k+2] *= len;
+}
+
+NormalAttr.prototype.toOcta = function(i, input, output, unit) {
+	var k = i*2;
+	var j = i*3; //input
+
+	var av0 = input[j] > 0? input[j]:-input[j];
+	var av1 = input[j+1] > 0? input[j+1]:-input[j+1];
+	var av2 = input[j+2] > 0? input[j+2]:-input[j+2];
+	var len = av0 + av1 + av2;
+	var p0 = av0/len;
+	var p1 = av1/len;
+
+	var ap0 = p0 > 0? p0: -p0;
+	var ap1 = p1 > 0? p1: -p1;
+
+	if(input[j+2] < 0) {
+		p0 = (input[j] < 0)? 1.0 - ap1 : ap1 - 1;
+		p1 = (input[j] < 0)? 1.0 - ap0 : ap0 - 1;
+	}
+	output[k] = p0*unit;
+	output[k+1] = p1*unit;
+
+/*
+		Point2f p(v[0], v[1]);
+		p /= (fabs(v[0]) + fabs(v[1]) + fabs(v[2]));
+
+		if(v[2] < 0) {
+			p = Point2f(1.0f - fabs(p[1]), 1.0f - fabs(p[0]));
+			if(v[0] < 0) p[0] = -p[0];
+			if(v[1] < 0) p[1] = -p[1];
+		}
+		return Point2i(p[0]*unit, p[1]*unit); */
 }
 
 

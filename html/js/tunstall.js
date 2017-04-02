@@ -27,22 +27,22 @@ BitStream = function(array) {
 BitStream.prototype = { 
 	read: function(bits) {
 		var t = this;
-		var result;
 		if(bits > t.pending) {
-			result = (t.current << (bits - t.pending))>>>0;
+			t.pending = bits - t.pending;
+			var result = (t.current << t.pending)>>>0; //looks the same.
+			t.pending = 32 - t.pending;
+
 			t.current = t.a[++t.position];
-			t.pending += 32 - bits;
 			result |= (t.current >>> t.pending);
 			t.current = (t.current & ((1<<t.pending)-1))>>>0; //slighting faster than mask.
+			return result;
+		} else { //splitting result in branch seems faster.
 
-		} else {
 			t.pending -= bits;
-			result = (t.current >>> t.pending);
-			t.current = (t.current & ((1<<t.pending)-1))>>>0; //slighting faster than mask.
+			var result = (t.current >>> t.pending);
+			t.current = (t.current & ((1<<t.pending)-1))>>>0; //slighting faster than mask, 
 			return result;
 		}
-		return result;
-
 	}
 };
 
@@ -52,9 +52,6 @@ Stream = function(buffer) {
 	t.buffer = new Uint8Array(buffer);
 	t.pos = 0;
 	t.view = new DataView(buffer);
-	t.max = new Uint32Array(32);
-	for(var i = 0; i < 32; i++)
-		t.max[i] = (1<<i)>>>1;
 }
 
 Stream.prototype = {
@@ -110,7 +107,7 @@ Stream.prototype = {
 
 		tunstall.decompress(this, t.logs);
 
-		for(var i =0; i < t.logs.readed; i++) {
+		for(var i = 0; i < t.logs.readed; i++) {
 			var diff = t.logs[i];
 			if(diff == 0) {
 				for(var c = 0; c < N; c++)

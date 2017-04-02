@@ -206,7 +206,7 @@ public:
 				logs[i] = ret;
 				int middle = (1<<ret)>>1;
 				if(val < 0) val = -val -middle;
-				bitstream.writeUint(val, ret);
+				bitstream.write(val, ret);
 			}
 		}
 
@@ -230,7 +230,7 @@ public:
 					continue;
 				}
 
-				int val = bitstream.readUint(diff);
+				int val = bitstream.read(diff);
 				int middle = 1<<(diff-1);
 				if(val < middle)
 					val = -val -middle;
@@ -257,7 +257,7 @@ public:
 
 			int max = 1<<(diff-1);
 			for(int c = 0; c < N; c++)
-				bitstream.writeUint(p[c] + max, diff);
+				bitstream.write(p[c] + max, diff);
 		}
 
 		write(bitstream);
@@ -285,7 +285,7 @@ public:
 			if(0 && diff < 22) {
 				//uint64_t &mask = bmask[diff]; //using table is 4% faster
 				const uint64_t mask = (1<<diff)-1;
-				uint64_t bits = bitstream.readUint(N*diff);
+				uint64_t bits = bitstream.read(N*diff);
 				for(uint32_t c = N-1; c > 0; c--) {
 					p[c] = (bits & mask) - max;
 					bits >>= diff;
@@ -293,7 +293,7 @@ public:
 				p[0] = bits - max;
 			} else {
 				for(int c = 0; c < N; c++)
-					p[c] = bitstream.readUint(diff) - max;
+					p[c] = bitstream.read(diff) - max;
 			}
 		}
 		return logs.size();

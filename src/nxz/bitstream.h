@@ -34,11 +34,8 @@ public:
 	void init(int size, uint32_t *buffer); //in uint32_t units for reading
 	void reserve(int size); //for writing
 
-
 	void write(uint32_t bits, int n);
-	void writeUint(uint32_t bits, int n);
-	void read(int n, uint32_t &bits);
-	uint32_t readUint(int numbits); //faster
+	uint32_t read(int numbits); //faster
 	uint32_t writtenBits();
 
 

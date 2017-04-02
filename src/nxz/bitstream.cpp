@@ -82,26 +82,8 @@ uint32_t BitStream::writtenBits() {
 }
 
 //TODO change name but the bmask is useless
-void BitStream::writeUint(uint32_t value, int numbits) {
-	if(!allocated) reserve(256);
-	if (numbits >= bits) {
-		buff = (buff << bits) | (value >> (numbits - bits));
-		push_back(buff);
-		value &= bmask[numbits - bits];
-		numbits -= bits;
-		bits = BITS_PER_WORD;
-		buff = 0;
-	}
-
-	if (numbits > 0) {
-		buff = (buff << numbits) | value;
-		bits -= numbits;
-	}
-}
-
 void BitStream::write(uint32_t value, int numbits) {
 	if(!allocated) reserve(256);
-	value &= bmask[numbits];
 	if (numbits >= bits) {
 		buff = (buff << bits) | (value >> (numbits - bits));
 		push_back(buff);
@@ -117,41 +99,26 @@ void BitStream::write(uint32_t value, int numbits) {
 	}
 }
 
-uint32_t BitStream::readUint(int numbits) {
-	assert(numbits > 0);
-        uint32_t ret = 0;
+uint32_t BitStream::read(int numbits) {
+	if(numbits > bits) {
+		bits = numbits - bits;
+		uint32_t result = (buff << bits); //looks the same.
+		bits = 32 - bits;
 
-	if (numbits > bits){
-		ret |= buff << (numbits - bits);
-		numbits -= bits;
 		buff = *pos++;
-		bits = BITS_PER_WORD;
+		result |= (buff >> bits);
+		buff = (buff & ((1<<bits)-1)); //slighting faster than mask.
+		return result;
+
+	} else {
+		bits -= numbits;
+		uint32_t result = (buff >> bits);
+		//buff -= result << bits; //same as below.
+		buff = (buff & ((1<<bits)-1)); //slighting faster than mask,
+		return result;
 	}
-
-	bits -= numbits;
-	ret |= buff >> (bits);
-	buff &= bmask[bits];
-
-	return ret;
 }
 
-void BitStream::read(int numbits, uint32_t &retval) {
-	assert(!allocated);
-	retval &= ~bmask[numbits];
-        uint32_t ret = 0;
-
-	if (numbits > bits){
-		ret |= buff << (numbits - bits);
-		numbits -= bits;
-		buff = *pos++;
-		bits = BITS_PER_WORD;
-	}
-
-	ret |= buff >> (bits - numbits);
-	buff &= bmask[bits - numbits]; //TODO! not needed!
-	bits -= numbits;
-	retval |= ret;
-}
 
 void BitStream::flush() {
 	if (bits != BITS_PER_WORD) {
