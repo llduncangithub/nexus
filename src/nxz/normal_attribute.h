@@ -12,7 +12,7 @@ public:
 					  ESTIMATED = 0x1, //estimate normals then encode differences
 					  BORDER = 0x2 };  //encode differences only on the boundary
 	uint32_t prediction;
-	std::vector<bool> boundary;
+	std::vector<int32_t> boundary;
 	std::vector<int32_t> values, diffs;
 
 	NormalAttr(int bits = 10) {
@@ -33,8 +33,8 @@ public:
 	virtual void dequantize(uint32_t nvert);
 
 	//Normal estimation
-	void computeNormals(Point3s *normals, std::vector<Point3f> &estimated);
-	void computeNormals(Point3f *normals, std::vector<Point3f> &estimated);
+	void computeNormals(Point3s *normals, std::vector<Point3i> &estimated);
+	void computeNormals(Point3f *normals, std::vector<Point3i> &estimated);
 
 
 	//Conversion to Octahedron encoding.
@@ -52,9 +52,16 @@ public:
 	}
 
 	static Point2i toOcta(Point3i v, int unit) {
-		float length = (float)v.norm();
-		Point3f n(v[0]/length, v[1]/length, v[2]/length);
-		return toOcta(n, unit);
+
+		Point2i p(v[0]*unit, v[1]*unit);
+		p /= (fabs(v[0]) + fabs(v[1]) + fabs(v[2]));
+
+		if(v[2] < 0) {
+			p = Point2i(unit - fabs(p[1]), unit - fabs(p[0]));
+			if(v[0] < 0) p[0] = -p[0];
+			if(v[1] < 0) p[1] = -p[1];
+		}
+		return p;
 	}
 
 	static Point3f toSphere(Point2i v, int unit) {

@@ -40,11 +40,11 @@ scene.fog = new THREE.Fog( 0x050505, 2000, 3500 );
 scene.add( new THREE.AmbientLight( 0x444444 ) );
 
 var light1 = new THREE.DirectionalLight( 0xffffff, 1.0 );
-light1.position.set( 1, 1, -1 );
+light1.position.set( 1, 1, -0.5 );
 scene.add( light1 );
 
 var light2 = new THREE.DirectionalLight( 0xffffff, 1.0 );
-light2.position.set( -1, -1, 1 );
+light2.position.set( -1, -0.5, 1 );
 scene.add( light2 );
 
 var renderer = new THREE.WebGLRenderer( { antialias: false } );

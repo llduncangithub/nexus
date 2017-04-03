@@ -151,21 +151,6 @@ Stream.prototype = {
 };
 
 
-/*
-function Tunstall(wordsize) {
-	var t = this;
-	t.wordsize = wordsize? wordsize : 8;
-
-	t.dictionary_size = 1<<this.wordsize;
-	t.starts = new Uint32Array(t.dictionary_size); //starts of each queue
-	t.queue = new Uint32Array(2*t.dictionary_size); //array of n symbols array of prob, position in buffer, length //limit to 8k*3
-	t.index = new Uint32Array(2*t.dictionary_size);
-	t.lengths = new Uint32Array(2*t.dictionary_size);
-//	t.table = new Uint8Array(dictionary_size*dictionary_size); //worst case for 2 symbols. 1 with 254 prob and other qwith 1 prob
-	t.table = new Uint8Array(8192); //worst case for 2 symbols. 1 with 254 prob and other qwith 1 prob
-}*/
-
-
 function Tunstall() {
 }
 
@@ -182,7 +167,7 @@ Tunstall.prototype = {
 	decompress: function(stream, data) {
 		var nsymbols = stream.readUChar();
 		this.probs = stream.readArray(nsymbols*2);
-		this.createDecodingTables2();
+		this.createDecodingTables();
 		var size = stream.readInt();
 		if(size > 100000000) throw("TOO LARGE!");
 		if(!data)
@@ -199,81 +184,8 @@ Tunstall.prototype = {
 		return data;
 	}, 
 
-	/* createDecodingTables: function() {
-		//read symbol,prob,symbol,prob as uchar.
-		//Here probs will range from 0 to 0xffff for better precision
 
-		var n_symbols = this.probs.length/2;
-		if(n_symbols <= 1) return;
-
-		var queues = []; //array of arrays
-		var buffer = []; 
-
-
-		//initialize adding all symbols to queues
-		for(var i = 0; i < n_symbols; i++) {
-			var symbol = this.probs[i*2];
-			var s = [(this.probs[i*2+1])<<8, buffer.length, 1]; //probability, position in the buffer, length
-			queues[i] = [s];
-			buffer.push(this.probs[i*2]); //symbol
-		}
-		var dictionary_size = 1<<this.wordsize;
-		var n_words = n_symbols;
-		var table_length = n_symbols;
-
-		//at each step we grow all queues using the most probable sequence
-		while(n_words < dictionary_size - n_symbols +1) {
-			//Should use a stack or something to be faster, but we have few symbols
-			//find highest probability word
-			var best = 0;
-			var max_prob = 0;
-			for(var i = 0; i < n_symbols; i++) {
-				var p = queues[i][0][0]; //front of queue probability.
-				if(p > max_prob) {
-					best = i;
-					max_prob = p;
-				}
-			}
-			var symbol = queues[best][0];
-			var pos = buffer.length;
-			
-			for(var i = 0; i < n_symbols; i++) {
-				var sym = this.probs[i*2];
-				var prob = this.probs[i*2+1]<<8;
-				var s = [((prob*symbol[0])>>>16), pos, symbol[2]+1]; //combine probs, keep track of buffer, keep length of queue
-
-				for(var k  = 0; k < symbol[2]; k++)
-					buffer[pos+k] = buffer[symbol[1] + k]; //copy sequence of symbols
-
-				pos += symbol[2];
-				buffer[pos++] = sym; //append symbol
-				queues[i].push(s);
-			}
-			table_length += (n_symbols-1)*(symbol[2] + 1) +1; 
-			n_words += n_symbols -1;
-			queues[best].shift(); //remove first thing
-		}
-
-		this.index = new Uint32Array(n_words);
-		this.lengths = new Uint32Array(n_words);
-		this.table = new Uint8Array(table_length);
-		var word = 0;
-		var pos = 0;
-		for(i = 0; i < queues.length; i++) {
-			var queue = queues[i];
-			for(var k = 0; k < queue.length; k++) {
-				var s = queue[k];
-				this.index[word] = pos;
-				this.lengths[word] = s[2]; //length
-				word++;
-
-				for(var j = 0; j < s[2]; j++)
-					this.table[pos + j] = buffer[s[1] + j]; //buffer of offset
-				pos += s[2]; //length
-			}
-		}
-	}, */
-	createDecodingTables2: function() {
+	createDecodingTables: function() {
 
 		var t = this;
 		var n_symbols = t.probs.length/2;

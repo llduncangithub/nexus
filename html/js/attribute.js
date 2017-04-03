@@ -203,27 +203,16 @@ NormalAttr.prototype.postDelta = function(nvert, nface, attrs, index) {
 
 	var coord = attrs.position;
 
-	var estimated = new Float32Array(nvert*3);
-	t.estimateNormals(nvert, coord.values, nface, index.values, estimated);
+	t.estimated = new Float32Array(nvert*3);
+	t.estimateNormals(nvert, coord.values, nface, index.faces);
 
-	if(t.prediction == t.Precition.BORDER) {
-		t.boundary = new Uint8Array(nvert);
-		t.markBoundary(nvert, nface, index, boundary);
+	if(t.prediction == t.Prediction.BORDER) {
+		t.boundary = new Uint32Array(nvert);
+		t.markBoundary(nvert, nface, index.faces, t.boundary);
 	}
 
-	t.computeNormals(nvert, estimated);
-/*	switch(format) {
-	case FLOAT:
-		computeNormals((Point3f *)buffer, estimated);
-		break;
-	case INT16:
-		computeNormals((Point3s *)buffer, estimated);
-		break;
-	default: throw "Format not supported for normal attribute (float, int16 only)";
-	}*/
+	t.computeNormals(nvert);
 } 
-
-
 
 NormalAttr.prototype.dequantize = function(nvert) {
 	var t = this;
@@ -231,41 +220,87 @@ NormalAttr.prototype.dequantize = function(nvert) {
 		return;
 
 	for(var i = 0; i < nvert; i++)
-		t.toSphere(i, t.values, t.buffer, t.q)
+		t.toSphere(i, t.values, i, t.buffer, t.q)
 }
 
+NormalAttr.prototype.computeNormals = function(nvert) {
+	var t = this;
+	var norm = t.estimated;
 
-NormalAttr.prototype.computeNormals(nvert, estimated) {
-
-	var count = 0; //here for the border.
 	if(t.prediction == t.Prediction.ESTIMATED) {
 		for(var i = 0; i < nvert; i++) {
-			t.toOcta(i, estimated, values, t.q);
-			t.toSphere(i, t.buffer, t.values, (int)q);
+			t.toOcta(i, norm, i, t.values, t.q);
+			t.toSphere(i, t.values, i, t.buffer, t.q);
 		}
-	} else { //BORDER
-		for(var i = 0; i < nvert; i++) {
-			Point3f &e = estimated[i];
-			int32_t *d = &diffs[count*2];
-			Point3s &n = normals[i];
 
-			if(boundary[i]) {
-				Point2i qn = toOcta(e, (int)q);
-				n = toSphere(Point2s(qn[0] + d[0], qn[0] + d[1]), (int)q);
+	} else { //BORDER
+		var count = 0; //here for the border.
+		for(var i = 0, k = 0; i < nvert; i++, k+=3) {
+			if(t.boundary[i] != 0) {
+				t.toOcta(i, norm, count, t.values, t.q);
+				t.toSphere(count, t.values, i, t.buffer, t.q);
 				count++;
+
 			} else {//no correction
-				for(int k = 0; k < 3; k++)
-					n[k] = (int16_t)(e[k]*32767.0f);
+				var len = 1/Math.sqrt(norm[k]*norm[k] + norm[k+1]*norm[k+1] + norm[k+2]*norm[k+2]);
+				if(t.type == t.Type.INT16)
+					len *= 32767;
+
+				t.buffer[k] = norm[k]*len;
+				t.buffer[k+1] = norm[k+1]*len;
+				t.buffer[k+2] = norm[k+2]*len;  
 			}
 		}
 	}
 }
 
-NormalAttr.prototype.toSphere = function(i, input, out, unit) {
+NormalAttr.prototype.markBoundary = function( nvert,  nface, index, boundary) {
+	for(var f = 0; f < nface*3; f += 3) {
+		boundary[index[f+0]] += index[f+1] - index[f+2];
+		boundary[index[f+1]] += index[f+2] - index[f+0];
+		boundary[index[f+2]] += index[f+0] - index[f+1];
+	}
+}
+
+
+NormalAttr.prototype.estimateNormals = function(nvert, coords, nface, index) {
+	var t = this;
+	for(var f = 0; f < nface*3; f += 3) {
+		var a = 3*index[f + 0];
+		var b = 3*index[f + 1];
+		var c = 3*index[f + 2];
+
+		var ba0 = coords[b+0] - coords[a+0];
+		var ba1 = coords[b+1] - coords[a+1];
+		var ba2 = coords[b+2] - coords[a+2];
+
+		var ca0 = coords[c+0] - coords[a+0];
+		var ca1 = coords[c+1] - coords[a+1];
+		var ca2 = coords[c+2] - coords[a+2];
+
+		var n0 = ba1*ca2 - ba2*ca1;
+		var n1 = ba2*ca0 - ba0*ca2;
+		var n2 = ba0*ca1 - ba1*ca0;
+
+		t.estimated[a + 0] += n0;
+		t.estimated[a + 1] += n1;
+		t.estimated[a + 2] += n2;
+		t.estimated[b + 0] += n0;
+		t.estimated[b + 1] += n1;
+		t.estimated[b + 2] += n2;
+		t.estimated[c + 0] += n0;
+		t.estimated[c + 1] += n1;
+		t.estimated[c + 2] += n2;
+	}
+}
+
+
+//taks input in ingress at i offset, adds out at c offset
+NormalAttr.prototype.toSphere = function(i, input, o, out, unit) {
 
 	var t = this;
 	var j = i*2;
-	var k = i*3;
+	var k = o*3;
 	var av0 = input[j] > 0? input[j]:-input[j];
 	var av1 = input[j+1] > 0? input[j+1]:-input[j+1];
 	out[k] = input[j];
@@ -276,34 +311,34 @@ NormalAttr.prototype.toSphere = function(i, input, out, unit) {
 		out[k+1] = (input[j+1] > 0)? unit - av0: av0 - unit;
 	}
 	var len = 1/Math.sqrt(out[k]*out[k] + out[k+1]*out[k+1] + out[k+2]*out[k+2]);
-	if(t.type == t.Type.INT16) {
+	if(t.type == t.Type.INT16)
 		len *= 32767;
-	}
+
 	out[k] *= len;
 	out[k+1] *= len;
 	out[k+2] *= len;
 }
 
-NormalAttr.prototype.toOcta = function(i, input, output, unit) {
-	var k = i*2;
+NormalAttr.prototype.toOcta = function(i, input, o, output, unit) {
+	var k = o*2;
 	var j = i*3; //input
 
 	var av0 = input[j] > 0? input[j]:-input[j];
 	var av1 = input[j+1] > 0? input[j+1]:-input[j+1];
 	var av2 = input[j+2] > 0? input[j+2]:-input[j+2];
 	var len = av0 + av1 + av2;
-	var p0 = av0/len;
-	var p1 = av1/len;
+	var p0 = input[j]/len;
+	var p1 = input[j+1]/len;
 
 	var ap0 = p0 > 0? p0: -p0;
 	var ap1 = p1 > 0? p1: -p1;
 
 	if(input[j+2] < 0) {
-		p0 = (input[j] < 0)? 1.0 - ap1 : ap1 - 1;
-		p1 = (input[j] < 0)? 1.0 - ap0 : ap0 - 1;
+		p0 = (input[j] >= 0)? 1.0 - ap1 : ap1 - 1;
+		p1 = (input[j+1] >= 0)? 1.0 - ap0 : ap0 - 1;
 	}
-	output[k] = p0*unit;
-	output[k+1] = p1*unit;
+	output[k] += p0*unit;
+	output[k+1] += p1*unit;
 
 /*
 		Point2f p(v[0], v[1]);

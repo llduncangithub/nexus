@@ -97,8 +97,8 @@ decodeMesh: function() {
 		t.attributes[i].decode(t.nvert, t.stream);
 	for(var i in t.attributes) 
 		t.attributes[i].deltaDecode(t.nvert, t.index.prediction);
-//	for(var i in t.attributes) 
-//		t.attributes[i].postDelta(t.nvert, t.nface, );
+	for(var i in t.attributes) 
+		t.attributes[i].postDelta(t.nvert, t.nface, t.attributes, t.index);
 	for(var i in t.attributes) { 
 		var a = t.attributes[i];
 		a.dequantize(t.nvert);
