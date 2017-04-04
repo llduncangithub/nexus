@@ -64,11 +64,15 @@ NxzDecoder::NxzDecoder(int len, uchar *input): vertex_count(0) {
 			attr = new ColorAttr();
 		else if(name == "uv")
 			attr = new GenericAttr<int>(components);
+		else if(name == "radius")
+			attr = new GenericAttr<int>(components);
 
 		attr->q = q;
 		attr->strategy = strategy;
 		data[name] = attr;
 	}
+	nvert = stream.read<uint32_t>();
+	nface = stream.read<uint32_t>();
 }
 
 bool NxzDecoder::setAttribute(const char *name, char *buffer, VertexAttribute::Format format) {
@@ -93,9 +97,6 @@ bool NxzDecoder::setAttribute(const char *name, char *buffer, VertexAttribute *a
 
 
 void NxzDecoder::decode() {
-	nvert = stream.read<uint32_t>();
-	nface = stream.read<uint32_t>();
-
 	if(nface > 0)
 		decodeMesh();
 	else

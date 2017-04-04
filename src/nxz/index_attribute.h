@@ -36,7 +36,7 @@ struct Face {
 	Face(uint32_t v0, uint32_t v1, uint32_t v2): a(v0), b(v1), c(v2) {}
 };
 
-class IndexAttr {
+class IndexAttribute {
 public:
 	uint32_t *faces32;
 	uint16_t *faces16;
@@ -49,7 +49,7 @@ public:
 	uint32_t max_front; //max size reached by front.
 	uint32_t size;
 
-	IndexAttr(): faces32(nullptr), faces16(nullptr), max_front(0) {}
+	IndexAttribute(): faces32(nullptr), faces16(nullptr), max_front(0) {}
 	void encode(Stream &stream) {
 		stream.write<uint32_t>(max_front);
 		stream.write<uint32_t>(groups.size());

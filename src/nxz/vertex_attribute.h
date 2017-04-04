@@ -43,8 +43,8 @@ public:
 
 	//quantize and store as values
 	virtual void quantize(uint32_t nvert, char *buffer) = 0;
-	//used by attributes which leverage other attributes
-	virtual void preDelta(uint32_t /*nvert*/, uint32_t /*nface*/, std::map<std::string, VertexAttribute *> &/*attrs*/, IndexAttr &/*index*/) {}
+	//used by attributes which leverage other attributes (normals, for example)
+	virtual void preDelta(uint32_t /*nvert*/, uint32_t /*nface*/, std::map<std::string, VertexAttribute *> &/*attrs*/, IndexAttribute &/*index*/) {}
 	//use parallelogram prediction or just diff from v0
 	virtual void deltaEncode(std::vector<Quad> &context) = 0;
 	//compress diffs and write to stream
@@ -55,12 +55,13 @@ public:
 	//use parallelogram prediction to recover values
 	virtual void deltaDecode(uint32_t nvert, std::vector<Face> &faces) = 0;
 	//use other attributes to estimate (normals for example)
-	virtual void postDelta(uint32_t /*nvert*/, uint32_t /*nface*/, std::map<std::string, VertexAttribute *> &/*attrs*/, IndexAttr &/*index*/) {}
+	virtual void postDelta(uint32_t /*nvert*/, uint32_t /*nface*/, std::map<std::string, VertexAttribute *> &/*attrs*/, IndexAttribute &/*index*/) {}
 	//reverse quantization operations
 	virtual void dequantize(uint32_t nvert) = 0;
 };
 
-//T is int short or char (for colors for example)
+
+//T should be int, short or char (for colors for example)
 template <class T> class GenericAttr: public VertexAttribute {
 public:
 	std::vector<T> values, diffs;
@@ -75,7 +76,6 @@ public:
 		values.resize(n);
 		diffs.resize(n);
 		int *vals = (int *)&*values.begin();
-		//TODO suppor other  formats
 		switch(format) {
 		case INT32:
 			for(uint32_t i = 0; i < n; i++)
@@ -129,30 +129,28 @@ public:
 	}
 
 	virtual void decode(uint32_t /*nvert */, Stream &stream) {
-		//TODO ensure FORMAT has enough space to store an INT
-		int readed;
 		if(strategy & CORRELATED)
-			readed = stream.decodeArray<T>((T *)buffer, N);
+			stream.decodeArray<T>((T *)buffer, N);
 		else
-			readed = stream.decodeValues<T>((T *)buffer, N);
+			stream.decodeValues<T>((T *)buffer, N);
 	}
 
 	virtual void deltaDecode(uint32_t nvert, std::vector<Face> &context) {
 		T *values = (T *)buffer;
 
-		if(strategy & PARALLEL) {
+		if(strategy & PARALLEL) { //parallelogram prediction
 			for(uint32_t i = 1; i < context.size(); i++) {
 				Face &f = context[i];
 				for(int c = 0; c < N; c++)
 					values[i*N + c] += values[f.a*N + c] + values[f.b*N + c] - values[f.c*N + c];
 			}
-		} else if(context.size()) {
+		} else if(context.size()) {  //mesh but not parallelogram prediction
 			for(uint32_t i = 1; i < context.size(); i++) {
 				Face &f = context[i];
 				for(int c = 0; c < N; c++)
 					values[i*N + c] += values[f.a*N + c];
 			}
-		} else { //point clouds assuming values are already sorted by proximity.
+		} else {       //point clouds assuming values are already sorted by proximity.
 			for(uint32_t i = N; i < nvert*N; i++) {
 				values[i] += values[i - N];
 			}
@@ -168,7 +166,7 @@ public:
 				((float *)buffer)[i] = coords[i]*q;
 			break;
 
-		case INT16: //do nothing;
+		case INT16:
 			for(uint32_t i = 0; i < n; i++)
 				((uint16_t *)buffer)[i] *= q;
 			break;
@@ -188,7 +186,7 @@ public:
 				((double *)buffer)[i] = coords[i]*q;
 			break;
 
-		case UINT16: //do nothing;
+		case UINT16:
 			for(uint32_t i = 0; i < n; i++)
 				((uint16_t *)buffer)[i] *= q;
 			break;

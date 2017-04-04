@@ -9,33 +9,32 @@ TEMPLATE = app
 
 QMAKE_CXXFLAGS += -std=c++11
 
-INCLUDEPATH += ../../../vcglib ../../../vcglib/eigenlib
-
 SOURCES += main.cpp \
     nxzdecoder.cpp \
     nxzencoder.cpp \
     tunstall.cpp \
     bitstream.cpp \
-    ../../../vcglib/wrap/ply/plylib.cpp \
     cstream.cpp \
-    nxz.cpp \
     color_attribute.cpp \
-    normal_attribute.cpp
+    normal_attribute.cpp \
+    ../../../vcglib/wrap/ply/plylib.cpp \
+    tinyply.cpp
 HEADERS += \
     nxzdecoder.h \
     nxzencoder.h \
     point.h \
     zpoint.h \
-    Stream.h \
+    cstream.h \
     tunstall.h \
     bitstream.h \
-    ../../../vcglib/wrap/ply/plylib.h \
-    nxz.h \
     cstream.h \
     color_attribute.h \
     normal_attribute.h \
     index_attribute.h \
-    vertex_attribute.h
+    vertex_attribute.h \
+    ../../../vcglib/wrap/ply/plylib.h \
+    timer.h \
+    tinyply.h
 
 DISTFILES += \
     plan.md

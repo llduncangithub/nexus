@@ -39,7 +39,7 @@ public:
 	uint32_t nvert, nface;
 
 
-	IndexAttr index;
+	IndexAttribute index;
 	std::map<std::string, VertexAttribute *> data;
 	int header_size;
 

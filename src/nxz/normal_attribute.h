@@ -41,13 +41,13 @@ public:
 	}
 
 	virtual void quantize(uint32_t nvert, char *buffer);
-	virtual void preDelta(uint32_t nvert,  uint32_t nface, std::map<std::string, VertexAttribute *> &attrs, IndexAttr &index);
+	virtual void preDelta(uint32_t nvert,  uint32_t nface, std::map<std::string, VertexAttribute *> &attrs, IndexAttribute &index);
 	virtual void deltaEncode(std::vector<Quad> &context);
 	virtual void encode(uint32_t nvert, Stream &stream);
 
 	virtual void decode(uint32_t nvert, Stream &stream);
 	virtual void deltaDecode(uint32_t nvert, std::vector<Face> &context);
-	virtual void postDelta(uint32_t nvert,  uint32_t nface, std::map<std::string, VertexAttribute *> &attrs, IndexAttr &index);
+	virtual void postDelta(uint32_t nvert,  uint32_t nface, std::map<std::string, VertexAttribute *> &attrs, IndexAttribute &index);
 	virtual void dequantize(uint32_t nvert);
 
 	//Normal estimation

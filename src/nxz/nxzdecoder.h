@@ -26,7 +26,6 @@ for more details.
 #include "tunstall.h"
 #include "../nxszip/fpu_precision.h"
 #include "zpoint.h"
-#include "nxz.h"
 #include "index_attribute.h"
 #include "vertex_attribute.h"
 #include "color_attribute.h"
@@ -41,7 +40,7 @@ public:
 	uint32_t nvert, nface;
 
 	std::map<std::string, VertexAttribute *> data;
-	IndexAttr index;
+	IndexAttribute index;
 
 	NxzDecoder(int len, uchar *input);
 
