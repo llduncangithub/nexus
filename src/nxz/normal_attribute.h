@@ -1,12 +1,30 @@
+/*
+Nexus
+
+Copyright(C) 2012 - Federico Ponchio
+ISTI - Italian National Research Council - Visual Computing Lab
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License (http://www.gnu.org/licenses/gpl.txt)
+for more details.
+*/
 #ifndef NX_NORMAL_ATTRIBUTE_H
 #define NX_NORMAL_ATTRIBUTE_H
 
-#include "attribute.h"
 #include "point.h"
+#include "vertex_attribute.h"
+
 
 namespace nx {
 
-class NormalAttr: public Attribute23 {
+class NormalAttr: public VertexAttribute {
 public:
 	enum Prediction { DIFF = 0x0,      //do not estimate normals, use diffs to previous
 					  ESTIMATED = 0x1, //estimate normals then encode differences
@@ -19,17 +37,17 @@ public:
 		N = 3;
 		q = pow(2, bits-1);
 		prediction = DIFF;
-		strategy |= Attribute23::CORRELATED;
+		strategy |= VertexAttribute::CORRELATED;
 	}
 
 	virtual void quantize(uint32_t nvert, char *buffer);
-	virtual void preDelta(uint32_t nvert,  uint32_t nface, std::map<std::string, Attribute23 *> &attrs, IndexAttr &index);
+	virtual void preDelta(uint32_t nvert,  uint32_t nface, std::map<std::string, VertexAttribute *> &attrs, IndexAttr &index);
 	virtual void deltaEncode(std::vector<Quad> &context);
 	virtual void encode(uint32_t nvert, Stream &stream);
 
 	virtual void decode(uint32_t nvert, Stream &stream);
 	virtual void deltaDecode(uint32_t nvert, std::vector<Face> &context);
-	virtual void postDelta(uint32_t nvert,  uint32_t nface, std::map<std::string, Attribute23 *> &attrs, IndexAttr &index);
+	virtual void postDelta(uint32_t nvert,  uint32_t nface, std::map<std::string, VertexAttribute *> &attrs, IndexAttr &index);
 	virtual void dequantize(uint32_t nvert);
 
 	//Normal estimation

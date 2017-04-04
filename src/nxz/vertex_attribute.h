@@ -1,49 +1,31 @@
-#ifndef NX_ATTRIBUTE_H
-#define NX_ATTRIBUTE_H
+/*
+Nexus
+
+Copyright(C) 2012 - Federico Ponchio
+ISTI - Italian National Research Council - Visual Computing Lab
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License (http://www.gnu.org/licenses/gpl.txt)
+for more details.
+*/
+#ifndef NX_VERTEX_ATTRIBUTE_H
+#define NX_VERTEX_ATTRIBUTE_H
 
 #include <map>
-#include "nxz.h"
+#include <string>
 #include "cstream.h"
+#include "index_attribute.h"
 
 namespace nx {
 
-class IndexAttr {
-public:
-	uint32_t *faces32;
-	uint16_t *faces16;
-	std::vector<uint32_t> faces;
-
-	std::vector<uint32_t> groups;
-	std::vector<uchar> clers;
-	BitStream bitstream;
-	uint32_t max_front; //max size reached by front.
-	uint32_t size;
-
-	IndexAttr(): faces32(nullptr), faces16(nullptr), max_front(0) {}
-	void encode(Stream &stream) {
-		stream.write<uint32_t>(max_front);
-		stream.write<uint32_t>(groups.size());
-		for(uint32_t &g: groups)
-			stream.write<uint32_t>(g);
-
-		stream.restart();
-		stream.compress(clers.size(), &*clers.begin());
-		stream.write(bitstream);
-		size = stream.elapsed();
-	}
-
-	void decode(Stream &stream) {
-		max_front = stream.read<uint32_t>();
-		groups.resize(stream.read<uint32_t>());
-		for(uint32_t &g: groups)
-			g = stream.read<uint32_t>();
-
-		stream.decompress(clers);
-		stream.read(bitstream);
-	}
-};
-
-class Attribute23 {
+class VertexAttribute {
 public:
 	enum Format { UINT32 = 0, INT32, UINT16, INT16, UINT8, INT8, FLOAT, DOUBLE };
 	enum Strategy { PARALLEL = 0x1, CORRELATED = 0x2 };
@@ -56,13 +38,13 @@ public:
 	Format format;    //input or output format
 	uint32_t size;    //compressed size (for stats and other nefarious purpouses)
 
-	Attribute23(): buffer(nullptr), N(0), q(0.0f), strategy(0), format(INT32), size(0) {}
-	virtual ~Attribute23(){}
+	VertexAttribute(): buffer(nullptr), N(0), q(0.0f), strategy(0), format(INT32), size(0) {}
+	virtual ~VertexAttribute(){}
 
 	//quantize and store as values
 	virtual void quantize(uint32_t nvert, char *buffer) = 0;
 	//used by attributes which leverage other attributes
-	virtual void preDelta(uint32_t /*nvert*/, uint32_t /*nface*/, std::map<std::string, Attribute23 *> &/*attrs*/, IndexAttr &/*index*/) {}
+	virtual void preDelta(uint32_t /*nvert*/, uint32_t /*nface*/, std::map<std::string, VertexAttribute *> &/*attrs*/, IndexAttr &/*index*/) {}
 	//use parallelogram prediction or just diff from v0
 	virtual void deltaEncode(std::vector<Quad> &context) = 0;
 	//compress diffs and write to stream
@@ -73,13 +55,13 @@ public:
 	//use parallelogram prediction to recover values
 	virtual void deltaDecode(uint32_t nvert, std::vector<Face> &faces) = 0;
 	//use other attributes to estimate (normals for example)
-	virtual void postDelta(uint32_t /*nvert*/, uint32_t /*nface*/, std::map<std::string, Attribute23 *> &/*attrs*/, IndexAttr &/*index*/) {}
+	virtual void postDelta(uint32_t /*nvert*/, uint32_t /*nface*/, std::map<std::string, VertexAttribute *> &/*attrs*/, IndexAttr &/*index*/) {}
 	//reverse quantization operations
 	virtual void dequantize(uint32_t nvert) = 0;
 };
 
 //T is int short or char (for colors for example)
-template <class T> class GenericAttr: public Attribute23 {
+template <class T> class GenericAttr: public VertexAttribute {
 public:
 	std::vector<T> values, diffs;
 
@@ -226,4 +208,4 @@ public:
 
 }
 
-#endif // NX_ATTRIBUTE_H
+#endif // NX_VERTEX_ATTRIBUTE_H

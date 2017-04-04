@@ -55,7 +55,7 @@ NxzDecoder::NxzDecoder(int len, uchar *input): vertex_count(0) {
 		uint32_t format = stream.read<uchar>();
 		uint32_t strategy = stream.read<uchar>();
 
-		Attribute23 *attr = nullptr;
+		VertexAttribute *attr = nullptr;
 		if(name == "position")
 			attr = new GenericAttr<int>(components);
 		else if(name == "normal")
@@ -71,17 +71,17 @@ NxzDecoder::NxzDecoder(int len, uchar *input): vertex_count(0) {
 	}
 }
 
-bool NxzDecoder::setAttribute(const char *name, char *buffer, Attribute23::Format format) {
+bool NxzDecoder::setAttribute(const char *name, char *buffer, VertexAttribute::Format format) {
 	if(data.find(name) == data.end()) return false;
-	Attribute23 *attr = data[name];
+	VertexAttribute *attr = data[name];
 	attr->format = format;
 	attr->buffer = buffer;
 	return true;
 }
 
-bool NxzDecoder::setAttribute(const char *name, char *buffer, Attribute23 *attr) {
+bool NxzDecoder::setAttribute(const char *name, char *buffer, VertexAttribute *attr) {
 	if(data.find(name) == data.end()) return false;
-	Attribute23 *found = data[name];
+	VertexAttribute *found = data[name];
 	attr->q = found->q;
 	attr->strategy = found->strategy;
 	attr->N = found->N;
@@ -138,7 +138,7 @@ void NxzDecoder::decodeMesh() {
 	for(auto it: data)
 		it.second->decode(nvert, stream);
 
-	prediction.resize(nvert);
+	index.prediction.resize(nvert);
 
 	uint32_t start = 0;
 	uint32_t cler = 0; //keeps track of current cler
@@ -156,7 +156,7 @@ void NxzDecoder::decodeMesh() {
 #endif
 
 	for(auto it: data)
-		it.second->deltaDecode(nvert, prediction);
+		it.second->deltaDecode(nvert, index.prediction);
 
 	for(auto it: data)
 		it.second->postDelta(nvert, nface, data, index);
@@ -207,8 +207,8 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler) {
 				if(split & (1<<k))
 					v = index.bitstream.read(splitbits);
 				else {
-					assert(vertex_count < (int)prediction.size());
-					prediction[vertex_count] = Face(last_index, last_index, last_index);
+					assert(vertex_count < (int)index.prediction.size());
+					index.prediction[vertex_count] = Face(last_index, last_index, last_index);
 					last_index = v = vertex_count++;
 				}
 				vindex[k] = v;
@@ -264,7 +264,7 @@ void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler) {
 				opposite = index.bitstream.read(splitbits);
 			} else {
 				//Edge is inverted respect to encoding hence v1-v0 inverted.
-				prediction[vertex_count] = Face(v1, v0, e.v2);
+				index.prediction[vertex_count] = Face(v1, v0, e.v2);
 				opposite = vertex_count++;
 			}
 

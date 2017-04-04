@@ -27,34 +27,34 @@ for more details.
 #include "../nxszip/fpu_precision.h"
 #include "zpoint.h"
 #include "nxz.h"
-#include "attribute.h"
+#include "index_attribute.h"
+#include "vertex_attribute.h"
 #include "color_attribute.h"
 #include "normal_attribute.h"
 
 namespace nx {
 
+
+
 class NxzDecoder {
 public:
 	uint32_t nvert, nface;
 
-	//std::vector<uint32_t> groups;
-	std::map<std::string, Attribute23 *> data;
+	std::map<std::string, VertexAttribute *> data;
 	IndexAttr index;
-	//Attribute<int> face; //turn this into a different class: with face32 and face16 pointers.
-
 
 	NxzDecoder(int len, uchar *input);
 
 	bool hasAttr(const char *name) { return data.count(name); }
 
-	bool setPositions(float *buffer) { return setAttribute("position", (char *)buffer, Attribute23::FLOAT); }
-	bool setNormals(float *buffer)   { return setAttribute("normal", (char *)buffer, Attribute23::FLOAT); }
-	bool setNormals(int16_t *buffer) { return setAttribute("normal", (char *)buffer, Attribute23::INT16); }
-	bool setColors(uchar *buffer)    { return setAttribute("color", (char *)buffer, Attribute23::UINT8); }
-	bool setUvs(float *buffer)       { return setAttribute("uv", (char *)buffer, Attribute23::FLOAT); }
+	bool setPositions(float *buffer) { return setAttribute("position", (char *)buffer, VertexAttribute::FLOAT); }
+	bool setNormals(float *buffer)   { return setAttribute("normal", (char *)buffer, VertexAttribute::FLOAT); }
+	bool setNormals(int16_t *buffer) { return setAttribute("normal", (char *)buffer, VertexAttribute::INT16); }
+	bool setColors(uchar *buffer)    { return setAttribute("color", (char *)buffer, VertexAttribute::UINT8); }
+	bool setUvs(float *buffer)       { return setAttribute("uv", (char *)buffer, VertexAttribute::FLOAT); }
 
-	bool setAttribute(const char *name, char *buffer, Attribute23::Format format);
-	bool setAttribute(const char *name, char *buffer, Attribute23 *attr);
+	bool setAttribute(const char *name, char *buffer, VertexAttribute::Format format);
+	bool setAttribute(const char *name, char *buffer, VertexAttribute *attr);
 
 	void setIndex(uint32_t *buffer) { index.faces32 = buffer; }
 	void setIndex(uint16_t *buffer) { index.faces16 = buffer; }
@@ -63,8 +63,6 @@ public:
 
 private:
 	Stream stream;
-
-	std::vector<Face> prediction;
 
 	int vertex_count; //keep tracks of current decoding vertex
 

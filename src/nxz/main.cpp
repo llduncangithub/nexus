@@ -1,3 +1,20 @@
+/*
+Nexus
+
+Copyright(C) 2012 - Federico Ponchio
+ISTI - Italian National Research Council - Visual Computing Lab
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License (http://www.gnu.org/licenses/gpl.txt)
+for more details.
+*/
 #include "nxzencoder.h"
 #include "nxzdecoder.h"
 
@@ -17,7 +34,8 @@ class NxVertex; class NxEdge; class NxFace;
 struct NxUsedTypes : public vcg::UsedTypes<vcg::Use<NxVertex>   ::AsVertexType,
 											  vcg::Use<NxEdge>     ::AsEdgeType,
 											  vcg::Use<NxFace>     ::AsFaceType>{};
-class NxVertex  : public vcg::Vertex< NxUsedTypes, vcg::vertex::Coord3f, vcg::vertex::Normal3f, vcg::vertex::Color4b, vcg::vertex::TexCoord2f, vcg::vertex::BitFlags  >{};
+class NxVertex  : public vcg::Vertex< NxUsedTypes, vcg::vertex::Coord3f, vcg::vertex::Normal3f, vcg::vertex::Color4b,
+		vcg::vertex::TexCoord2f, vcg::vertex::Radiusf, vcg::vertex::BitFlags  >{};
 class NxFace    : public vcg::Face<   NxUsedTypes, vcg::face::VertexRef, vcg::face::BitFlags > {};
 class NxEdge    : public vcg::Edge<NxUsedTypes> {};
 class NxMesh    : public vcg::tri::TriMesh< std::vector<NxVertex>, std::vector<NxFace> , std::vector<NxEdge>  > {};
@@ -46,7 +64,11 @@ int main(int argc, char *argv[]) {
 	} */
 
 	NxMesh mesh;
-	if(tri::io::ImporterPLY<NxMesh>::Open(mesh, argv[1]) != 0) {
+	int loadmask = 0;
+//		vcg::tri::io::Mask::IOM_VERTCOORD, IOM_VERTCOLOR, IOM_VERTQUALITY, IOM_VERTNORMAL, IOM_VERTTEXCOORD, IOM_VERTRADIUS,
+//				IOM_FACECOLOR, IOM_FACEQUALITY, IOM_WEDGTEXCOORD
+
+	if(tri::io::ImporterPLY<NxMesh>::Open(mesh, argv[1], loadmask) != 0) {
 		printf("Error reading file  %s\n",argv[1]);
 		exit(0);
 	}
@@ -56,12 +78,16 @@ int main(int argc, char *argv[]) {
 	vector<vcg::Point3f> coords;
 	vector<vcg::Point3f> normals;
 	vector<vcg::Color4b> colors;
+	vector<vcg::TexCoord2f> uvs;
+	vector<float> radiuses;
 	vector<unsigned int> index;
 
 	for(auto &v: mesh.vert) {
 		coords.push_back(v.P());
 		normals.push_back(v.N());
 		colors.push_back(v.C());
+		uvs.push_back(v.T());
+		radiuses.push_back(v.R());
 	}
 
 	NxMesh::VertexType *start = &*mesh.vert.begin();
@@ -78,16 +104,25 @@ int main(int argc, char *argv[]) {
 	//TODO checks for: strategy cannot be parallel in point clouds (ALL attributes)
 	//                 normals strategy must be DIFF
 
-//#define POINTCLOUD
-#ifdef POINTCLOUD
-	nx::NxzEncoder encoder(nvert, 0, nx::Stream::TUNSTALL);
-	encoder.addPositions((float *)&*coords.begin());
-#else
+	bool pointcloud = false;
+	if(pointcloud)
+		nface = 0;
+
 	nx::NxzEncoder encoder(nvert, nface, nx::Stream::TUNSTALL);
-	encoder.addPositions((float *)&*coords.begin(), &*index.begin());
-#endif
-	encoder.addNormals((float *)&*normals.begin(), 10, nx::NormalAttr::BORDER);
-	encoder.addColors((unsigned char *)&*colors.begin());
+	if(pointcloud)
+		encoder.addPositions((float *)&*coords.begin());
+	else
+		encoder.addPositions((float *)&*coords.begin(), &*index.begin());
+	//		vcg::tri::io::Mask::IOM_VERTCOORD, IOM_VERTCOLOR, IOM_VERTQUALITY, IOM_VERTNORMAL, IOM_VERTTEXCOORD, IOM_VERTRADIUS,
+	//				IOM_FACECOLOR, IOM_FACEQUALITY, IOM_WEDGTEXCOORD
+	if(loadmask & vcg::tri::io::Mask::IOM_VERTNORMAL)
+		encoder.addNormals((float *)&*normals.begin(), 10, nx::NormalAttr::BORDER);
+	if(loadmask & vcg::tri::io::Mask::IOM_VERTCOLOR)
+		encoder.addColors((unsigned char *)&*colors.begin());
+	if(loadmask & vcg::tri::io::Mask::IOM_VERTTEXCOORD)
+		encoder.addUvs((float *)&*uvs.begin(), 2.0f/1024.0f);
+	if(loadmask & vcg::tri::io::Mask::IOM_VERTRADIUS)
+		encoder.addAttribute("radius", (char *)&*radiuses.begin(), nx::VertexAttribute::FLOAT, 1, 1.0f);
 	encoder.encode();
 
 
@@ -102,11 +137,11 @@ int main(int argc, char *argv[]) {
 
 	cout << "Header: " << encoder.header_size << " bpv: " << (float)encoder.header_size/nvert << endl;
 
-	nx::Attribute23 *coord = encoder.data["position"];
+	nx::VertexAttribute *coord = encoder.data["position"];
 	cout << "Coord bpv; " << 8.0f*coord->size/nvert << endl;
 	cout << "Coord q: " << coord->q << endl << endl;
 
-	nx::Attribute23 *norm = encoder.data["normal"];
+	nx::VertexAttribute *norm = encoder.data["normal"];
 	if(norm) {
 		cout << "Normal bpv; " << 8.0f*norm->size/nvert << endl;
 		cout << "Normal q: " << norm->q << endl << endl;
@@ -114,16 +149,24 @@ int main(int argc, char *argv[]) {
 
 	nx::ColorAttr *color = dynamic_cast<nx::ColorAttr *>(encoder.data["color"]);
 	if(color) {
-		cout << "Color LCCA bpv; " << 8.0f*color->size/nvert << endl;
-		cout << "Color LCCA q: " << color->qc[0] << " " << color->qc[1] << " " << color->qc[2] << " " << color->qc[3] << endl << endl;
+		cout << "Color bpv; " << 8.0f*color->size/nvert << endl;
+		cout << "Color q: " << color->qc[0] << " " << color->qc[1] << " " << color->qc[2] << " " << color->qc[3] << endl << endl;
+	}
+
+
+	nx::GenericAttr<float> *radius = dynamic_cast<nx::GenericAttr<float> *>(encoder.data["radius"]);
+	if(radius) {
+		cout << "Radius  bpv; " << 8.0f*radius->size/nvert << endl;
+		cout << "Radius q: " << radius->q << endl << endl;
 	}
 
 
 	cout << "Face bpv; " << 8.0f*encoder.index.size/nvert << endl;
 
 	std::vector<vcg::Point3f> recoords(nvert);
-	std::vector<vcg::Point3f> renorms(nvert, Point3f(0, 0, 0));
-	std::vector<vcg::Color4b> recolors(nvert, Color4b(255, 255, 255, 255));
+	std::vector<vcg::Point3f> renorms(nvert, vcg::Point3f(0.0f, 0.0f, 0.0f));
+	std::vector<vcg::Color4b> recolors(nvert, vcg::Color4b(255, 255, 255, 255));
+	std::vector<vcg::TexCoord2f> reuvs(nvert, vcg::TexCoord2f(0.0f, 0.0f));
 	std::vector<uint32_t> reindex(nface*3);
 
 
@@ -138,6 +181,9 @@ int main(int argc, char *argv[]) {
 			decoder.setNormals((float *)&*renorms.begin());
 		if(decoder.data.count("color"))
 			decoder.setColors((uchar *)&*recolors.begin());
+		if(decoder.data.count("uv"))
+			decoder.setUvs((float *)&*reuvs.begin());
+
 
 #ifndef POINTCLOUD
 		decoder.setIndex(&*reindex.begin());
@@ -166,6 +212,7 @@ int main(int argc, char *argv[]) {
 		out.vert[i].P() = recoords[i];
 		out.vert[i].N() = renorms[i];
 		out.vert[i].C() = recolors[i];
+		out.vert[i].T() = reuvs[i];
 	}
 
 	cout << "Nvert: " << nvert << " nface: " << nface << endl;
@@ -184,7 +231,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	vcg::tri::io::ExporterPLY<NxMesh>::Save(out, "test.ply",
-		tri::io::Mask::IOM_VERTCOLOR | tri::io::Mask::IOM_VERTNORMAL );
+		tri::io::Mask::IOM_VERTCOLOR | tri::io::Mask::IOM_VERTNORMAL | tri::io::Mask::IOM_VERTTEXCOORD );
 
 
 	return 0;

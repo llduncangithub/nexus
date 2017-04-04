@@ -26,8 +26,8 @@ for more details.
 
 #include "cstream.h"
 #include "zpoint.h"
-#include "nxz.h"
-#include "attribute.h"
+#include "index_attribute.h"
+#include "vertex_attribute.h"
 #include "color_attribute.h"
 #include "normal_attribute.h"
 
@@ -35,22 +35,13 @@ namespace nx {
 
 class NxzEncoder {
 public:
-	//uint32_t flags; //keeps track of what is inside
+
 	uint32_t nvert, nface;
 
+
 	IndexAttr index;
-/*	Attribute<Point3i> coord;
-	Attribute<Point2i> norm;
-	Attribute<unsigned char> color[4];
-	Attribute<Point2i> uv; */
-	std::map<std::string, Attribute23 *> data;
-
-
-	//std::vector<uint32_t> index;
-	//int index_size;
+	std::map<std::string, VertexAttribute *> data;
 	int header_size;
-
-//	Normals normals_prediction;
 
 	Stream stream;
 
@@ -65,46 +56,27 @@ public:
 
 	bool addColors(unsigned char *buffer, int lumabits = 6, int chromabits = 6, int alphabits = 5);
 
-	bool addUV(float *buffer, float q = 0);
+	bool addUvs(float *buffer, float q = 0);
 
-	bool addAttribute(const char *name, char *buffer, Attribute23::Format format, int components, float q, uint32_t strategy);
+	bool addAttribute(const char *name, char *buffer, VertexAttribute::Format format, int components, float q, uint32_t strategy = 0);
 	//whatever is inside is your job to fill attr variables.
-	bool addAttribute(const char *name, char *buffer, Attribute23 *attr);
+	bool addAttribute(const char *name, char *buffer, VertexAttribute *attr);
 
 	void addGroup(int end_triangle) { index.groups.push_back(end_triangle); }
 
 	void encode();
 
 private:
-	//std::vector<uint32_t> groups;
-	//std::vector<uchar> clers;
 	int current_vertex;
 
 	std::vector<bool> boundary;
 	std::vector<int> encoded;    //encoded vertex number
 	std::vector<Quad> prediction;
 
-//	void setCoordBits();
-//	void setDataBits();
-
 	void encodePointCloud();
-//	void encodeZPoints(std::vector<ZPoint> &zpoints);
 
 	void encodeMesh();
 	void encodeFaces(int start, int end);
-
-/*	void encodeCoords();
-	void encodeNormals();
-	void encodeColors();
-	void encodeUvs();
-	void encodeDatas(); */
-
-/*	void computeNormals(std::vector<Point2i> &estimated_normals);
-	void markBoundary();
-
-	void encodeDiff(std::vector<uchar> &diffs, BitStream &stream, int val);
-	void encodeDiff(std::vector<uchar> &diffs, BitStream &stream, const Point2i &val);
-	void encodeDiff(std::vector<uchar> &diffs, BitStream &stream, const Point3i &val); */
 };
 
 } //namespace

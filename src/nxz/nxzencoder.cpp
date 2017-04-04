@@ -64,11 +64,11 @@ bool NxzEncoder::addPositions(float *buffer, float q, Point3f o) {
 		max -= min;
 		q = 0.02*pow(max[0]*max[1]*max[2], 2.0/3.0)/nvert;
 	}
-	uint32_t strategy = Attribute23::CORRELATED;
+	uint32_t strategy = VertexAttribute::CORRELATED;
 	if(nface > 0)
-		strategy |= Attribute23::PARALLEL;
+		strategy |= VertexAttribute::PARALLEL;
 
-	return addAttribute("position", (char *)buffer, Attribute23::FLOAT, 3, q, strategy );
+	return addAttribute("position", (char *)buffer, VertexAttribute::FLOAT, 3, q, strategy );
 }
 
 
@@ -115,9 +115,9 @@ bool NxzEncoder::addPositions(float *buffer, uint16_t *_index, float q, Point3f 
 bool NxzEncoder::addNormals(float *buffer, int bits, NormalAttr::Prediction no) {
 
 	NormalAttr *normal = new NormalAttr(bits);
-	normal->format = Attribute23::FLOAT;
+	normal->format = VertexAttribute::FLOAT;
 	normal->prediction = no;
-//	normal->strategy = 0; //Attribute23::CORRELATED;
+//	normal->strategy = 0; //VertexAttribute::CORRELATED;
 	bool ok = addAttribute("normal", (char *)buffer, normal);
 	if(!ok) delete normal;
 	return ok;
@@ -135,22 +135,22 @@ bool NxzEncoder::addNormals(int16_t *buffer, int bits, NormalAttr::Prediction no
 bool NxzEncoder::addColors(unsigned char *buffer, int lumabits, int chromabits, int alphabits) {
 	ColorAttr *color = new ColorAttr();
 	color->setQ(lumabits, chromabits, alphabits);
-	color->format = Attribute23::UINT8;
+	color->format = VertexAttribute::UINT8;
 	bool ok = addAttribute("color", (char *)buffer, color);
 	if(!ok) delete color;
 	return ok;
 }
 
-bool NxzEncoder::addUV(float *buffer, float q) {
+bool NxzEncoder::addUvs(float *buffer, float q) {
 	GenericAttr<int> *uv = new GenericAttr<int>(2);
 	uv->q = q;
-	uv->format = Attribute23::FLOAT;
+	uv->format = VertexAttribute::FLOAT;
 	bool ok = addAttribute("uv", (char *)buffer, uv);
 	if(!ok) delete uv;
 	return ok;
 }
 
-bool NxzEncoder::addAttribute(const char *name, char *buffer, Attribute23::Format format, int components, float q, uint32_t strategy) {
+bool NxzEncoder::addAttribute(const char *name, char *buffer, VertexAttribute::Format format, int components, float q, uint32_t strategy) {
 	if(data.count(name)) return false;
 	GenericAttr<int> *attr = new GenericAttr<int>(components);
 
@@ -162,7 +162,7 @@ bool NxzEncoder::addAttribute(const char *name, char *buffer, Attribute23::Forma
 	return true;
 }
 //whatever is inside is your job to fill attr variables.
-bool NxzEncoder::addAttribute(const char *name, char *buffer, Attribute23 *attr) {
+bool NxzEncoder::addAttribute(const char *name, char *buffer, VertexAttribute *attr) {
 	if(data.count(name)) return true;
 	attr->quantize(nvert, buffer);
 	data[name] = attr;
