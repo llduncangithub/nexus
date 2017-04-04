@@ -39,8 +39,8 @@ public:
 	S &operator[](int k) { return v[k]; }
 	const S &operator[](int k) const { return v[k]; }
 
-	bool operator==(const Point2 &c) const { return v[0] == c(0) && v[1] == c(1); }
-	bool operator!=(const Point2 &c) const { return v[0] != c(0) || v[1] != c(1); }
+	bool operator==(const Point2 &c) const { return v[0] == c[0] && v[1] == c[1]; }
+	bool operator!=(const Point2 &c) const { return v[0] != c[0] || v[1] != c[1]; }
 	bool operator<(const Point2 &c) const {
 		if(v[0] == c[0]) return v[1] < c[1];
 		return v[0] < c[0];
