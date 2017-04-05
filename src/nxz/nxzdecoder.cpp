@@ -166,11 +166,11 @@ void NxzDecoder::decodeMesh() {
 		it.second->dequantize(nvert);
 }
 
-static int ilog2(uint64_t p) {
+/*static int ilog2(uint64_t p) {
 	int k = 0;
 	while ( p>>=1 ) { ++k; }
 	return k;
-}
+}*/
 
 void NxzDecoder::decodeFaces(uint32_t start, uint32_t end, uint32_t &cler) {
 

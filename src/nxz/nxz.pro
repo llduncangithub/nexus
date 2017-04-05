@@ -18,7 +18,8 @@ SOURCES += main.cpp \
     color_attribute.cpp \
     normal_attribute.cpp \
     ../../../vcglib/wrap/ply/plylib.cpp \
-    tinyply.cpp
+    tinyply.cpp \
+    meshloader.cpp
 HEADERS += \
     nxzdecoder.h \
     nxzencoder.h \
@@ -34,7 +35,9 @@ HEADERS += \
     vertex_attribute.h \
     ../../../vcglib/wrap/ply/plylib.h \
     timer.h \
-    tinyply.h
+    tinyply.h \
+    meshloader.h \
+    objload.h
 
 DISTFILES += \
     plan.md

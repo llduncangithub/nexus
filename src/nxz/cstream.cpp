@@ -27,6 +27,13 @@ for more details.
 using namespace nx;
 using namespace std;
 
+int nx::ilog2(uint64_t p) {
+	int k = 0;
+	while ( p>>=1 ) { ++k; }
+	return k;
+}
+
+
 //TODO uniform notation length first, pointer after everywhere
 int Stream::compress(uint32_t size, uchar *data) {
 	switch(entropy) {
@@ -41,6 +48,7 @@ int Stream::compress(uint32_t size, uchar *data) {
 	case LZ4:     return lz4_compress(data, size);
 #endif
 	}
+	return -1;
 }
 
 //TODO uniform notation length first, pointer after

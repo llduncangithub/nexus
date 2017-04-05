@@ -37,6 +37,7 @@ public:
 
 	Format format;    //input or output format
 	uint32_t size;    //compressed size (for stats and other nefarious purpouses)
+	int bits;    //quantization in bits;
 
 	VertexAttribute(): buffer(nullptr), N(0), q(0.0f), strategy(0), format(INT32), size(0) {}
 	virtual ~VertexAttribute(){}
@@ -75,31 +76,40 @@ public:
 
 		values.resize(n);
 		diffs.resize(n);
-		int *vals = (int *)&*values.begin();
 		switch(format) {
 		case INT32:
 			for(uint32_t i = 0; i < n; i++)
-				vals[i] = ((int32_t *)buffer)[i]/q;
+				values[i] = ((int32_t *)buffer)[i]/q;
 			break;
 		case INT16:
 			for(uint32_t i = 0; i < n; i++)
-				vals[i] = ((int16_t *)buffer)[i]/q;
+				values[i] = ((int16_t *)buffer)[i]/q;
 			break;
 		case INT8:
 			for(uint32_t i = 0; i < n; i++)
-				vals[i] = ((int16_t *)buffer)[i]/q;
+				values[i] = ((int16_t *)buffer)[i]/q;
 			break;
 		case FLOAT:
 			for(uint32_t i = 0; i < n; i++)
-				vals[i] = ((float *)buffer)[i]/q;
+				values[i] = ((float *)buffer)[i]/q;
 			break;
 		case DOUBLE:
 			for(uint32_t i = 0; i < n; i++)
-				vals[i] = ((double *)buffer)[i]/q;
+				values[i] = ((double *)buffer)[i]/q;
 			break;
 		default: throw "Unsupported format.";
 		}
-
+		bits = 0;
+		for(int k = 0; k < N; k++) {
+			int min = values[k];
+			int max = min;
+			for(uint32_t i = k; i < n; i +=N) {
+				if(min > values[i]) min = values[i];
+				if(max < values[i]) max = values[i];
+			}
+			max -= min;
+			bits = std::max(bits, ilog2(max));
+		}
 	}
 
 	virtual void deltaEncode(std::vector<Quad> &context) {

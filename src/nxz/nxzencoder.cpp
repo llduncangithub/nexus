@@ -318,10 +318,6 @@ void NxzEncoder::encodeMesh() {
 	stream.write<int>(nvert);
 	stream.write<int>(nface);
 
-/*	stream.write<int>(groups.size());
-	for(uint32_t &end: groups)
-		stream.write<int>(end); */
-
 	header_size = stream.elapsed();
 
 	for(auto it: data)

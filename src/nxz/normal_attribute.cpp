@@ -81,6 +81,14 @@ void NormalAttr::quantize(uint32_t nvert, char *buffer) {
 	}
 	default: throw "Unsigned types not supported for normals";
 	}
+	Point2i min(values[0], values[1]);
+	Point2i max(min);
+	for(uint32_t i = 1; i < nvert; i++) {
+		min.setMin(normals[i]);
+		max.setMax(normals[i]);
+	}
+	max -= min;
+	bits = std::max(ilog2(max[0]), ilog2(max[1]));
 }
 
 

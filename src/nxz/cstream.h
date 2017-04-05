@@ -29,6 +29,7 @@ using namespace std;
 
 namespace nx {
 
+int ilog2(uint64_t p);
 
 class Stream {
 protected:
@@ -181,11 +182,6 @@ public:
 		return n;
 	}
 
-	static int ilog2(uint64_t p) {
-		int k = 0;
-		while ( p>>=1 ) { ++k; }
-		return k;
-	}
 
 
 	template <class T> void encodeValues(uint32_t size, T *values, int N) {

@@ -59,7 +59,7 @@ public:
 	bool addUvs(float *buffer, float q = 0);
 
 	bool addAttribute(const char *name, char *buffer, VertexAttribute::Format format, int components, float q, uint32_t strategy = 0);
-	//whatever is inside is your job to fill attr variables.
+	//its your job to fill attr variables appropriately (type and number of components in particular.
 	bool addAttribute(const char *name, char *buffer, VertexAttribute *attr);
 
 	void addGroup(int end_triangle) { index.groups.push_back(end_triangle); }
