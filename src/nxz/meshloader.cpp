@@ -59,16 +59,18 @@ bool MeshLoader::loadObj(const std::string &filename) {
 	swap(m.texCoord, uvs);
 	swap(m.normal, norms);
 
+	nvert = coords.size()/3;
 	nface = 0;
 	for(auto it: m.faces) {
-		nface += it.second.size();
+		nface += it.second.size()/3;
 		index.insert(index.end(), it.second.begin(), it.second.end());
 		groups.push_back(nface);
 	}
 
 	for(uint32_t i = 0; i < index.size(); i++)
 		assert(index[i] < coords.size()/3);
-	return coords.size() > 0;
+
+	return nvert > 0;
 }
 
 void MeshLoader::splitWedges() {

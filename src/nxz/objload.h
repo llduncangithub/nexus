@@ -40,7 +40,7 @@ struct Model {
     std::vector<float> texCoord; //< 2 * N entries
     std::vector<float> normal; //< 3 * N entries
     
-    std::map<std::string, std::vector<unsigned short> > faces; //< assume triangels and uniform indexing
+	std::map<std::string, std::vector<uint32_t> > faces; //< assume triangels and uniform indexing
 };
 
 struct ObjModel {
@@ -100,7 +100,6 @@ inline std::istream & operator>>(std::istream & in, std::set<T> & vec ){
 }
 
 inline std::istream & operator>>( std::istream & in, ObjModel::FaceVertex & f){
-    int val;
     if(in >> f.v){
         if(in.peek() == '/'){
             in.get();
@@ -176,7 +175,7 @@ inline void tesselateObjModel( std::vector<ObjModel::FaceVertex> & input, std::v
         const unsigned size = *(s+1) - *s;
         if(size > 3){
             const ObjModel::FaceVertex & start_vertex = input[*s];
-            for( int i = 1; i < size-1; ++i){
+			for( unsigned i = 1; i < size-1; ++i){
                 output_start.push_back(output.size());
                 output.push_back(start_vertex);
                 output.push_back(input[*s+i]);
@@ -222,10 +221,10 @@ Model convertToModel( const ObjModel & obj ) {
     for(std::map<std::string, ObjModel::FaceList>::const_iterator g = obj.faces.begin(); g != obj.faces.end(); ++g){
         const std::string & name = g->first;
         const ObjModel::FaceList & fl = g->second;
-        std::vector<unsigned short> & v = model.faces[g->first];
+		std::vector<uint32_t> & v = model.faces[name];
         v.reserve(fl.first.size());
         for(std::vector<ObjModel::FaceVertex>::const_iterator f = fl.first.begin(); f != fl.first.end(); ++f){
-            const unsigned short index = std::distance(unique.begin(), std::lower_bound(unique.begin(), unique.end(), *f));
+			const uint32_t index = std::distance(unique.begin(), std::lower_bound(unique.begin(), unique.end(), *f));
             v.push_back(index);
         }
     }
@@ -251,6 +250,8 @@ Model loadModelFromString( const std::string & str ){
 
 Model loadModelFromFile( const std::string & str) {
     std::ifstream in(str.c_str());
+	if(!in.is_open())
+		return Model();
     return loadModel(in);
 }
 
@@ -262,22 +263,22 @@ inline std::ostream & operator<<( std::ostream & out, const ObjModel::FaceVertex
 std::ostream & operator<<( std::ostream & out, const Model & m ){
     if(!m.vertex.empty()){
         out << "vertex\n";
-        for(int i = 0; i < m.vertex.size(); ++i)
+		for(size_t i = 0; i < m.vertex.size(); ++i)
             out << m.vertex[i] << (((i % 3) == 2)?"\n":"\t");
     }
     if(!m.texCoord.empty()){
         out << "texCoord\n";
-        for(int i = 0; i < m.texCoord.size(); ++i)
+		for(size_t i = 0; i < m.texCoord.size(); ++i)
             out << m.texCoord[i] << (((i % 2) == 1)?"\n":"\t");
     }
     if(!m.normal.empty()){
         out << "normal\n";
-        for(int i = 0; i < m.normal.size(); ++i)
+		for(size_t i = 0; i < m.normal.size(); ++i)
             out << m.normal[i] << (((i % 3) == 2)?"\n":"\t");
     }
     if(!m.faces.empty()){
         out << "faces\t";
-        for(std::map<std::string, std::vector<unsigned short> >::const_iterator g = m.faces.begin(); g != m.faces.end(); ++g){
+		for(std::map<std::string, std::vector<uint32_t> >::const_iterator g = m.faces.begin(); g != m.faces.end(); ++g){
             out << g->first << " ";
         }
         out << "\n";

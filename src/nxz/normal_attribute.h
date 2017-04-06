@@ -73,7 +73,10 @@ public:
 	static Point2i toOcta(Point3i v, int unit) {
 
 		Point2i p(v[0]*unit, v[1]*unit);
-		p /= (fabs(v[0]) + fabs(v[1]) + fabs(v[2]));
+		int len = (abs(v[0]) + abs(v[1]) + abs(v[2]));
+		if(len == 0)
+			return Point2i(0, 0);
+		p /= len;
 
 		if(v[2] < 0) {
 			p = Point2i(unit - fabs(p[1]), unit - fabs(p[0]));

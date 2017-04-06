@@ -28,11 +28,11 @@ for more details.
 using namespace nx;
 using namespace std;
 
-static int ilog2(uint64_t p) {
+/*static int ilog2(uint64_t p) {
 	int k = 0;
 	while ( p>>=1 ) { ++k; }
 	return k;
-}
+}*/
 
 
 NxzEncoder::NxzEncoder(uint32_t _nvert, uint32_t _nface, Stream::Entropy entropy):
@@ -432,12 +432,6 @@ static void buildTopology(vector<McFace> &faces) {
 static int next_(int t) {
 	t++;
 	if(t == 3) t = 0;
-	return t;
-}
-
-static int prev_(int t) {
-	t--;
-	if(t == -1) t = 2;
 	return t;
 }
 

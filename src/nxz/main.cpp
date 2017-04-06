@@ -28,10 +28,14 @@ for more details.
 #include "meshloader.h"
 #include "timer.h"
 
+#include </home/ponchio/devel/vcglib/vcg/complex/complex.h>
+#include </home/ponchio/devel/vcglib/wrap/io_trimesh/import_obj.h>
 
 using namespace nx;
 using namespace std;
 using namespace tinyply;
+
+
 
 
 int main(int argc, char *argv[]) {
@@ -56,7 +60,7 @@ int main(int argc, char *argv[]) {
 	if(pointcloud)
 		encoder.addPositions(&*loader.coords.begin());
 	else
-		encoder.addPositions(&*loader.coords.begin(), &*loader.index.begin(), 0.009);
+		encoder.addPositions(&*loader.coords.begin(), &*loader.index.begin());
 	//TODO add suppor for wedge and face attributes adding simplex attribute
 	if(loader.norms.size())
 		encoder.addNormals(&*loader.norms.begin(), 10, nx::NormalAttr::BORDER);
@@ -117,7 +121,6 @@ int main(int argc, char *argv[]) {
 	cout << "Face bpv; " << 8.0f*encoder.index.size/nvert << endl;
 
 
-	nx::MeshLoader out;
 
 	timer.start();
 
@@ -125,6 +128,9 @@ int main(int argc, char *argv[]) {
 	assert(decoder.nface == nface);
 	assert(decoder.nvert = nvert);
 
+	nx::MeshLoader out;
+	out.nvert = encoder.nvert;
+	out.nface = encoder.nface;
 	out.coords.resize(nvert*3);
 	decoder.setPositions(&*out.coords.begin());
 	if(decoder.data.count("normal")) {
@@ -143,8 +149,10 @@ int main(int argc, char *argv[]) {
 		out.radiuses.resize(nvert);
 		decoder.setAttribute("radius", (char *)&*out.radiuses.begin(), nx::VertexAttribute::FLOAT);
 	}
-	out.index.resize(nface*3);
-	decoder.setIndex(&*out.index.begin());
+	if(decoder.nface) {
+		out.index.resize(nface*3);
+		decoder.setIndex(&*out.index.begin());
+	}
 	decoder.decode();
 
 	int delta = timer.elapsed();

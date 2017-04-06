@@ -84,7 +84,7 @@ bool PlyFile::parse_header(std::istream & is)
     return true;
 }
 
-void PlyFile::read_header_text(std::string line, std::istream & is, std::vector<std::string>& place, int erase)
+void PlyFile::read_header_text(std::string line, std::istream & /*is*/, std::vector<std::string>& place, int erase)
 {
     place.push_back((erase > 0) ? line.erase(0, erase) : line);
 }
